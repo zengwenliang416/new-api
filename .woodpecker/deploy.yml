@@ -21,10 +21,12 @@ concurrency:
 steps:
   - name: deploy-production
     image: docker:29-cli
-    environment:
-      DOCKER_CONFIG: /docker-config
     commands:
       - apk add --no-cache bash
+      - mkdir -p /tmp/docker-config
+      - cp /docker-config/config.json /tmp/docker-config/config.json
+      - chmod 600 /tmp/docker-config/config.json
+      - export DOCKER_CONFIG=/tmp/docker-config
       - bash -n ops/woodpecker/deploy.sh
       - bash ops/woodpecker/deploy.sh
     volumes:
