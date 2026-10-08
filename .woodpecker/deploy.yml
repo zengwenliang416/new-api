@@ -9,10 +9,15 @@ labels:
   location: production-80
   repo: zengwenliang416/new-api
 
-# Push is added after the first manual production deploy succeeds.
 when:
   - event: manual
     branch: main
+  - event: push
+    branch: main
+    path:
+      exclude:
+        - .woodpecker/**
+        - "**/*.md"
 
 concurrency:
   limit: 1
