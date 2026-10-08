@@ -1,0 +1,29 @@
+# Merged with /root/new-api/docker-compose.yml. The API container does not
+# receive the Docker socket. Only deploy-agent can recreate new-api.
+services:
+  new-api:
+    environment:
+      DEPLOY_AGENT_URL: http://deploy-agent:8091
+      DEPLOY_AGENT_TOKEN: ${DEPLOY_AGENT_TOKEN}
+      DEPLOY_STATE_DIR: /app/deploy-state
+    volumes:
+      - ./deploy-state:/app/deploy-state:ro
+
+  deploy-agent:
+    image: docker:29-cli
+    container_name: new-api-deploy-agent
+    restart: unless-stopped
+    entrypoint: ["/bin/deploy-agent"]
+    environment:
+      DEPLOY_AGENT_TOKEN: ${DEPLOY_AGENT_TOKEN}
+      ROLLBACK_SCRIPT: /root/new-api/bin/rollback.sh
+      DEPLOY_STATE_DIR: /root/new-api/deploy-state
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/new-api:/root/new-api
+      - /root/new-api/bin/deploy-agent:/bin/deploy-agent:ro
+      - /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose:ro
+    networks:
+      - new-api
+    mem_limit: 256m
+    pids_limit: 256

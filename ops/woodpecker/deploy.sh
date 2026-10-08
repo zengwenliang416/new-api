@@ -5,8 +5,11 @@ set -Eeuo pipefail
 
 root=/root/new-api
 compose_file="${root}/docker-compose.yml"
+override_file="${root}/deploy-agent-compose.yml"
 env_file="${root}/.env"
+state_dir="${root}/deploy-state"
 container=new-api
+agent_container=new-api-deploy-agent
 mysql_container=new-api-mysql
 network=new-api-network
 registry_image=docker.io/zengwenliang0416/new-api
@@ -32,6 +35,28 @@ restore_env() {
   fi
 }
 
+restore_state() {
+  if [[ -z "$backup_dir" ]]; then
+    return
+  fi
+  if [[ -d "${backup_dir}/deploy-state" ]]; then
+    rm -rf "$state_dir"
+    cp -a "${backup_dir}/deploy-state" "$state_dir"
+  fi
+}
+
+compose() {
+  (
+    cd "$root"
+    docker compose --project-name new-api -f "$compose_file" -f "$override_file" "$@"
+  )
+}
+
+json_get() {
+  local file="$1" key="$2"
+  sed -n "s/.*\"${key}\":\"\\([^\"]*\\)\".*/\\1/p" "$file" | head -n 1
+}
+
 rollback() {
   local status=$?
   if [[ "$status" -eq 0 || -z "$backup_dir" ]]; then
@@ -43,11 +68,9 @@ rollback() {
     log "restoring production env without recreating the container"
   fi
   restore_env
+  restore_state
   if [[ "$switched" -eq 1 ]]; then
-    (
-      cd "$root"
-      docker compose --project-name new-api up -d --no-deps --force-recreate "$container"
-    ) || log "rollback compose failed"
+    compose up -d --no-deps --force-recreate "$container" || log "rollback compose failed"
     docker logs --tail 40 "$container" 2>&1 | grep -Ei -v 'password|secret|dsn|token' || true
   fi
 }
@@ -80,16 +103,42 @@ printf '%s\n' "$system_version" > VERSION
 log "system version ${system_version}"
 log "building ${image}"
 docker build --progress=plain --tag "$image" .
+agent_cid="$(docker create "$image")"
+mkdir -p "${root}/bin" "$state_dir"
+chmod 700 "${root}/bin"
+chmod 755 "$state_dir"
+docker cp "$agent_cid":/deploy-agent "${root}/bin/deploy-agent"
+docker rm "$agent_cid" >/dev/null
+chmod 755 "${root}/bin/deploy-agent"
+cp ops/woodpecker/rollback.sh "${root}/bin/rollback.sh"
+chmod 755 "${root}/bin/rollback.sh"
+cp ops/woodpecker/deploy-agent-compose.yml "$override_file"
+chmod 644 "$override_file"
+sh -n "${root}/bin/rollback.sh"
 log "pushing ${image}"
 docker push "$image"
 
 previous_image="$(docker inspect -f '{{.Config.Image}}' "$container")"
 [[ "$previous_image" != "$image" ]] || fail "production is already running ${image}"
+if ! grep -Eq '^DEPLOY_AGENT_TOKEN=[0-9a-f]{64}$' "$env_file"; then
+  agent_token="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  [[ "$agent_token" =~ ^[0-9a-f]{64}$ ]] || fail "could not generate the deploy agent token"
+  tmp_env="$(mktemp)"
+  grep -v '^DEPLOY_AGENT_TOKEN=' "$env_file" > "$tmp_env" || true
+  printf 'DEPLOY_AGENT_TOKEN=%s\n' "$agent_token" >> "$tmp_env"
+  cat "$tmp_env" > "$env_file"
+  chmod 600 "$env_file"
+  rm -f "$tmp_env"
+  unset agent_token
+fi
 backup_dir="${root}/backups/$(date -u +%Y%m%dT%H%M%SZ)-${sha:0:12}"
 mkdir -p "$backup_dir"
 chmod 700 "${root}/backups" "$backup_dir"
 cp -a "$env_file" "${backup_dir}/.env"
 cp -a "$compose_file" "${backup_dir}/docker-compose.yml"
+if [[ -d "$state_dir" ]]; then
+  cp -a "$state_dir" "${backup_dir}/deploy-state"
+fi
 chmod 600 "${backup_dir}/.env"
 printf '%s\n' "$previous_image" > "${backup_dir}/previous-image"
 chmod 600 "${backup_dir}/previous-image"
@@ -105,15 +154,25 @@ cat "$tmp_env" > "$env_file"
 chmod 600 "$env_file"
 rm -f "$tmp_env"
 
-resolved="$(cd "$root" && docker compose --project-name new-api config --images)"
+previous_version=""
+if [[ -f "${state_dir}/release.json" ]]; then
+  previous_version="$(json_get "${state_dir}/release.json" current_version)"
+fi
+tmp_release="$(mktemp)"
+printf '{"current_image":"%s","previous_image":"%s","current_version":"%s","previous_version":"%s","deployed_at":"%s"}\n' \
+  "$image" "$previous_image" "$system_version" "$previous_version" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  > "$tmp_release"
+chmod 644 "$tmp_release"
+mv "$tmp_release" "${state_dir}/release.json"
+printf '{"state":"idle","started_at":""}\n' > "${state_dir}/rollback-status.json"
+chmod 644 "${state_dir}/rollback-status.json"
+
+resolved="$(compose config --images)"
 printf '%s\n' "$resolved" | grep -qx "$image" || fail "compose did not resolve ${image}"
 
 log "replacing ${container}"
 switched=1
-(
-  cd "$root"
-  docker compose --project-name new-api up -d --no-deps --force-recreate "$container"
-)
+compose up -d --no-deps --force-recreate "$container"
 
 deadline=$((SECONDS + 480))
 healthy=0
@@ -142,5 +201,29 @@ done
 [[ "$(docker inspect -f '{{.HostConfig.NanoCpus}}' "$container")" == "2000000000" ]] || fail "CPU limit changed"
 [[ "$(docker inspect -f '{{.HostConfig.PidsLimit}}' "$container")" == "256" ]] || fail "PID limit changed"
 docker inspect -f '{{json .NetworkSettings.Networks}}' "$container" | grep -q "$network" || fail "container left ${network}"
+docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$container" | grep -q '/data' || fail "data mount is missing"
+docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$container" | grep -q '/app/logs' || fail "log mount is missing"
+docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$container" | grep -q '/app/deploy-state' || fail "release mount is missing"
+docker exec "$container" sh -c 'test -n "$SQL_DSN" && test -n "$DEPLOY_AGENT_TOKEN" && test "$DEPLOY_AGENT_URL" = "http://deploy-agent:8091"' \
+  || fail "container environment is incomplete"
+
+log "starting deploy agent"
+if compose up -d --no-deps deploy-agent; then
+  agent_deadline=$((SECONDS + 60))
+  agent_ready=0
+  while (( SECONDS < agent_deadline )); do
+    if docker run --rm --network "container:${agent_container}" curlimages/curl:8.16.0 \
+      --fail --silent --show-error --max-time 5 http://127.0.0.1:8091/healthz; then
+      agent_ready=1
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$agent_ready" -ne 1 ]]; then
+    log "ERROR: deploy agent did not become ready; admin rollback will stay unavailable"
+  fi
+else
+  log "ERROR: deploy agent did not start; admin rollback will stay unavailable"
+fi
 
 log "deployment succeeded: image=${image} previous=${previous_image} backup=${backup_dir}"

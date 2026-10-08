@@ -488,6 +488,8 @@ const AUDIT_TEMPLATES: Record<string, string> = {
   'user.reset_passkey': 'Reset the user passkey',
   'user.oauth_unbind': 'Removed an OAuth binding for the user',
   // System settings
+  'deployment.rollback':
+    'Switched the API image from {{current_image}} to {{previous_image}}',
   'option.update': 'Updated system setting {{key}}',
   'option.passkey_domains':
     'Updated Passkey domains: removed {{domains}}; affected {{known}}; unknown {{unknown}}',

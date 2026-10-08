@@ -25,6 +25,7 @@ import { formatTimestamp } from '@/lib/format'
 
 import { SettingsSection } from '../components/settings-section'
 import { SettingsSwitchField } from '../components/settings-form-layout'
+import { DeploymentReleasePanel } from './deployment-release'
 
 type UpdateCheckerSectionProps = {
   currentVersion?: string | null
@@ -72,6 +73,7 @@ export function UpdateCheckerSection(props: UpdateCheckerSectionProps) {
           )}
         />
         <SystemUpdateAction compact={false} />
+        <DeploymentReleasePanel />
       </div>
     </SettingsSection>
   )

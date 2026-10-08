@@ -435,5 +435,14 @@ func SetApiRouter(router *gin.Engine) {
 			deploymentsRoute.POST("/:id/extend", controller.ExtendDeployment)
 			deploymentsRoute.DELETE("/:id", controller.DeleteDeployment)
 		}
+
+		// Host rollback. The API process does not receive the Docker socket;
+		// it asks the separate deploy agent to switch the previous image.
+		deployRoute := apiRouter.Group("/deploy")
+		deployRoute.Use(middleware.AdminAuth())
+		{
+			deployRoute.GET("/release", controller.GetDeploymentRelease)
+			deployRoute.POST("/rollback", middleware.CriticalRateLimit(), controller.PostDeploymentRollback)
+		}
 	}
 }
