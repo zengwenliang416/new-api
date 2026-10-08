@@ -3,7 +3,7 @@ clone:
     image: woodpeckerci/plugin-git:2.10.0
     settings:
       partial: false
-      depth: 1
+      depth: 0
 
 labels:
   location: production-80
@@ -27,7 +27,7 @@ steps:
   - name: deploy-production
     image: docker:29-cli
     commands:
-      - apk add --no-cache bash
+      - apk add --no-cache bash git
       - mkdir -p /tmp/docker-config
       - cp /docker-config/config.json /tmp/docker-config/config.json
       - chmod 600 /tmp/docker-config/config.json

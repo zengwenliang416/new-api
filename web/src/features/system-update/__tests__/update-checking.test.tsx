@@ -242,6 +242,54 @@ describe('administrator update entry', () => {
     ).toHaveLength(2)
   })
 
+  test('explains that a commit build cannot be compared with a release', async () => {
+    const user = userEvent.setup()
+    const commit = '8639340696f4f3bbe2c461b765c215116aea2960'
+    client.setQueryData(STATUS_QUERY_KEY, { version: commit })
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: { version: commit } },
+    })
+    render(<SystemUpdateAction presentation='version' />, { wrapper: Wrapper })
+    await user.click(
+      screen.getByRole('button', {
+        name: `System updates, current version: ${commit}`,
+      })
+    )
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(commit)).toBeInTheDocument()
+    expect(
+      await within(dialog).findByText('Unable to compare versions')
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).queryByText('New version available: v1.0.0-rc.36')
+    ).not.toBeInTheDocument()
+    expect(
+      within(dialog).queryByText('No newer version available.')
+    ).not.toBeInTheDocument()
+  })
+
+  test('treats release build metadata as the same release', async () => {
+    const user = userEvent.setup()
+    respondWithRelease('v1.0.0-rc.41')
+    const version = 'v1.0.0-rc.41+8639340696f4'
+    client.setQueryData(STATUS_QUERY_KEY, { version })
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: { version } },
+    })
+    render(<SystemUpdateAction presentation='version' />, { wrapper: Wrapper })
+    await user.click(
+      screen.getByRole('button', {
+        name: `System updates, current version: ${version}`,
+      })
+    )
+    expect(
+      await screen.findByText('No newer version available.')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Ignore this version' })
+    ).not.toBeInTheDocument()
+  })
+
   test.each(['', 'v0.0.0'])(
     'shows an unknown current version for %s and allows ignoring the fetched release',
     async (version) => {

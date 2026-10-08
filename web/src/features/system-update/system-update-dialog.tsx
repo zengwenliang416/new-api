@@ -63,7 +63,7 @@ export function SystemUpdateDialog(props: SystemUpdateDialogProps) {
     if (update.isIgnored) {
       statusText = t('This version is ignored')
     } else if (update.comparison === null) {
-      statusText = ''
+      statusText = update.currentVersion ? t('Unable to compare versions') : ''
     } else if (update.hasUpdate) {
       statusText = t('New version available: {{version}}', {
         version: release.tag_name,
@@ -124,9 +124,9 @@ export function SystemUpdateDialog(props: SystemUpdateDialogProps) {
       }
     >
       <dl className='grid min-w-0 gap-3 text-sm sm:grid-cols-2'>
-        <div className='min-w-0'>
+        <div className='min-w-0 sm:col-span-2'>
           <dt className='text-muted-foreground'>{t('Current version')}</dt>
-          <dd className='font-medium break-all'>
+          <dd className='font-medium break-words'>
             {update.currentVersion || t('Unknown version')}
           </dd>
         </div>

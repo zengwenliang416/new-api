@@ -62,7 +62,22 @@ grep -q 'name: new-api-network' "$compose_file" || fail "compose no longer defin
 [[ "$(docker inspect -f '{{.State.Running}}' "$mysql_container")" == "true" ]] || fail "MySQL is not running"
 docker network inspect "$network" >/dev/null
 
-printf '%s\n' "$sha" > VERSION
+command -v git >/dev/null 2>&1 || fail "git is required to determine the release version"
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "deploy workspace is not a git checkout"
+git fetch --quiet https://github.com/QuantumNous/new-api.git '+refs/tags/v*:refs/tags/v*' \
+  || fail "could not fetch upstream release tags"
+release_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD)" \
+  || fail "no release tag is reachable from ${sha}"
+tagged_commit="$(git rev-parse "${release_tag}^{commit}")"
+if [[ "$tagged_commit" == "$sha" ]]; then
+  system_version="$release_tag"
+else
+  system_version="${release_tag%%+*}+${sha:0:12}"
+fi
+[[ "$system_version" =~ ^v?[0-9]+(\.[0-9]+){2,}(-(alpha|beta|rc|patch)(\.[0-9]+)?(-i18nfix\.[0-9]+)?)?(\+[0-9A-Za-z.-]+)?$ ]] \
+  || fail "refusing to publish uncomparable version ${system_version}"
+printf '%s\n' "$system_version" > VERSION
+log "system version ${system_version}"
 log "building ${image}"
 docker build --progress=plain --tag "$image" .
 log "pushing ${image}"
