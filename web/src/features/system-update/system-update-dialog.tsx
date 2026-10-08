@@ -55,21 +55,31 @@ export function SystemUpdateDialog(props: SystemUpdateDialogProps) {
     release &&
     (release.prerelease ||
       (parseSystemVersion(release.tag_name)?.stage ?? 3) < 3)
-  const canIgnore = release && (update.hasUpdate || update.comparison === null)
+  const canIgnore =
+    update.checksEnabled &&
+    release &&
+    !update.matchesMain &&
+    (update.hasUpdate || update.comparison === null)
   let statusText = t('Updates have not been checked yet.')
   if (update.checking) {
     statusText = t('Checking updates...')
+  } else if (!update.checksEnabled) {
+    statusText = t('Update checks are turned off.')
   } else if (release) {
     if (update.isIgnored) {
       statusText = t('This version is ignored')
-    } else if (update.comparison === null) {
-      statusText = update.currentVersion ? t('Unable to compare versions') : ''
     } else if (update.hasUpdate) {
       statusText = t('New version available: {{version}}', {
         version: release.tag_name,
       })
-    } else {
+    } else if (
+      update.matchesMain ||
+      update.comparison === 0 ||
+      update.comparison === 1
+    ) {
       statusText = t('No newer version available.')
+    } else if (update.comparison === null) {
+      statusText = update.currentVersion ? t('Unable to compare versions') : ''
     }
   } else if (snapshot?.lastCheckedAt) {
     statusText = t('No releases found.')
@@ -100,7 +110,7 @@ export function SystemUpdateDialog(props: SystemUpdateDialogProps) {
           <Button
             type='button'
             variant='outline'
-            disabled={update.checking || !update.online}
+            disabled={update.checking || !update.online || !update.checksEnabled}
             onClick={() => void update.checkNow()}
           >
             {update.checking ? t('Checking updates...') : t('Check again')}

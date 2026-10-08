@@ -47,15 +47,26 @@ import { useSystemUpdatePreferencesStore, useSystemUpdateStore } from '../store'
 import { SystemUpdateAction } from '../system-update-action'
 import { SYSTEM_UPDATE_INTERVAL, useSystemUpdate } from '../use-system-update'
 
+const mainSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 const release = {
-  tag_name: 'v1.0.0-rc.36',
-  draft: false,
-  prerelease: true,
+  tag_name: mainSha.slice(0, 12),
+  commit_sha: mainSha,
+  prerelease: false,
   published_at: '2026-09-08T13:01:00Z',
   body: 'Release notes for administrators.',
 }
 const fetchMock = vi.fn<typeof fetch>()
 let client: QueryClient
+
+function commitPayload(sha = mainSha) {
+  return {
+    sha,
+    commit: {
+      message: release.body,
+      committer: { date: release.published_at },
+    },
+  }
+}
 
 function Wrapper(props: { children: ReactNode }) {
   return (
@@ -63,10 +74,10 @@ function Wrapper(props: { children: ReactNode }) {
   )
 }
 
-function respondWithRelease(tag = release.tag_name): void {
+function respondWithCommit(sha = mainSha): void {
   fetchMock.mockImplementation(
     async () =>
-      new Response(JSON.stringify([{ ...release, tag_name: tag }]), {
+      new Response(JSON.stringify(commitPayload(sha)), {
         headers: { 'Content-Type': 'application/json' },
       })
   )
@@ -75,7 +86,10 @@ function respondWithRelease(tag = release.tag_name): void {
 beforeEach(() => {
   localStorage.clear()
   useSystemUpdateStore.setState({ snapshot: null })
-  useSystemUpdatePreferencesStore.setState({ ignoredVersionsByUserId: {} })
+  useSystemUpdatePreferencesStore.setState({
+    ignoredVersionsByUserId: {},
+    checksEnabled: true,
+  })
   useAuthStore
     .getState()
     .auth.setUser({ id: 1, username: 'admin', role: ROLE.ADMIN })
@@ -83,7 +97,7 @@ beforeEach(() => {
   onlineManager.setOnline(true)
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
-  respondWithRelease()
+  respondWithCommit()
   client = createAppQueryClient()
   client.setQueryData(STATUS_QUERY_KEY, { version: 'v1.0.0-rc.35' })
   vi.spyOn(api, 'get').mockResolvedValue({
@@ -95,7 +109,10 @@ afterEach(() => {
   cleanup()
   client.clear()
   useSystemUpdateStore.setState({ snapshot: null })
-  useSystemUpdatePreferencesStore.setState({ ignoredVersionsByUserId: {} })
+  useSystemUpdatePreferencesStore.setState({
+    ignoredVersionsByUserId: {},
+    checksEnabled: true,
+  })
   useAuthStore.getState().auth.reset()
   localStorage.clear()
   focusManager.setFocused(undefined)
@@ -130,14 +147,14 @@ describe('administrator update entry', () => {
       useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role })
       render(<SystemUpdateAction />, { wrapper: Wrapper })
       const button = await screen.findByRole('button', {
-        name: 'New version available: v1.0.0-rc.36',
+        name: 'New version available: bbbbbbbbbbbb',
       })
       expect(button).toHaveAttribute('aria-haspopup', 'dialog')
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(fetchMock).toHaveBeenCalledTimes(1)
       const [url, options] = fetchMock.mock.calls[0]
       expect(String(url)).toBe(
-        'https://api.github.com/repos/QuantumNous/new-api/releases?per_page=100'
+        'https://api.github.com/repos/zengwenliang416/new-api/commits/main'
       )
       expect(options?.credentials).toBe('omit')
       expect(options?.headers).toEqual({
@@ -145,6 +162,21 @@ describe('administrator update entry', () => {
       })
     }
   )
+
+  test('does not request main when the administrator turns checks off', async () => {
+    localStorage.setItem(
+      'system-update-preferences:v1',
+      JSON.stringify({
+        state: { ignoredVersionsByUserId: {}, checksEnabled: false },
+        version: 0,
+      })
+    )
+    useSystemUpdatePreferencesStore.getState().setChecksEnabled(false)
+    const hook = renderHook(useSystemUpdate, { wrapper: Wrapper })
+    await waitFor(() => expect(hook.result.current.checksEnabled).toBe(false))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(hook.result.current.shouldNotify).toBe(false)
+  })
 
   test('shares results with maintenance, opens release details by keyboard and returns focus on Escape', async () => {
     const user = userEvent.setup()
@@ -159,7 +191,7 @@ describe('administrator update entry', () => {
       { wrapper: Wrapper }
     )
     const buttons = await screen.findAllByRole('button', {
-      name: /New version available: v1\.0\.0-rc\.36/,
+      name: /New version available: bbbbbbbbbbbb/,
     })
     expect(buttons).toHaveLength(2)
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -176,7 +208,7 @@ describe('administrator update entry', () => {
     await user.keyboard('{Enter}')
     const dialog = await screen.findByRole('dialog', { name: 'System updates' })
     expect(await within(dialog).findByText(release.body)).toBeInTheDocument()
-    expect(within(dialog).getByText('Pre-release')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Pre-release')).not.toBeInTheDocument()
     expect(within(dialog).getByText('Published at')).toBeInTheDocument()
     expect(
       within(dialog).queryByText(
@@ -190,7 +222,7 @@ describe('administrator update entry', () => {
       within(dialog).getByRole('link', { name: 'Go to GitHub' })
     ).toHaveAttribute(
       'href',
-      'https://github.com/QuantumNous/new-api/releases/tag/v1.0.0-rc.36'
+      `https://github.com/zengwenliang416/new-api/commit/${mainSha}`
     )
     await user.keyboard('{Escape}')
     await waitFor(() =>
@@ -199,9 +231,13 @@ describe('administrator update entry', () => {
     expect(buttons[0]).toHaveFocus()
   })
 
-  test('does not suggest a downgrade and updates every entry after a manual recheck', async () => {
+  test('treats a deployment that matches main as current and a later commit as an update', async () => {
     const user = userEvent.setup()
-    client.setQueryData(STATUS_QUERY_KEY, { version: 'v1.0.0-rc.37' })
+    const current = `v1.0.0-rc.41+${mainSha.slice(0, 12)}`
+    client.setQueryData(STATUS_QUERY_KEY, { version: current })
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: { version: current } },
+    })
     render(
       <>
         <SystemUpdateAction />
@@ -216,12 +252,14 @@ describe('administrator update entry', () => {
     expect(
       await screen.findByText('No newer version available.')
     ).toBeInTheDocument()
-    respondWithRelease('v1.0.0-rc.38')
+    const laterSha = 'c'.repeat(40)
+    respondWithCommit(laterSha)
     await user.click(screen.getByRole('button', { name: 'Check again' }))
     expect(
-      await screen.findByText('New version available: v1.0.0-rc.38', {
-        selector: 'p',
-      })
+      await screen.findByText(
+        `New version available: ${laterSha.slice(0, 12)}`,
+        { selector: 'p' }
+      )
     ).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
     await user.keyboard('{Escape}')
@@ -230,13 +268,12 @@ describe('administrator update entry', () => {
     )
     expect(
       screen.getAllByRole('button', {
-        name: 'New version available: v1.0.0-rc.38',
+        name: `New version available: ${laterSha.slice(0, 12)}`,
       })
     ).toHaveLength(2)
 
-    act(() =>
-      client.setQueryData(STATUS_QUERY_KEY, { version: 'v1.0.0-rc.38' })
-    )
+    const installed = `v1.0.0-rc.41+${laterSha.slice(0, 12)}`
+    act(() => client.setQueryData(STATUS_QUERY_KEY, { version: installed }))
     expect(
       await screen.findAllByRole('button', { name: 'Check for updates' })
     ).toHaveLength(2)
@@ -261,17 +298,17 @@ describe('administrator update entry', () => {
       await within(dialog).findByText('Unable to compare versions')
     ).toBeInTheDocument()
     expect(
-      within(dialog).queryByText('New version available: v1.0.0-rc.36')
+      within(dialog).queryByText('New version available: bbbbbbbbbbbb')
     ).not.toBeInTheDocument()
     expect(
       within(dialog).queryByText('No newer version available.')
     ).not.toBeInTheDocument()
   })
 
-  test('treats release build metadata as the same release', async () => {
+  test('treats a deployment build as current when it prefixes main', async () => {
     const user = userEvent.setup()
-    respondWithRelease('v1.0.0-rc.41')
-    const version = 'v1.0.0-rc.41+8639340696f4'
+    respondWithCommit(mainSha)
+    const version = `v1.0.0-rc.41+${mainSha.slice(0, 12)}`
     client.setQueryData(STATUS_QUERY_KEY, { version })
     vi.spyOn(api, 'get').mockResolvedValue({
       data: { success: true, data: { version } },
@@ -336,7 +373,7 @@ describe('administrator update entry', () => {
       { wrapper: Wrapper }
     )
     const triggers = await screen.findAllByRole('button', {
-      name: /New version available: v1\.0\.0-rc\.36/,
+      name: /New version available: bbbbbbbbbbbb/,
     })
     await user.click(triggers[0])
     const dialog = screen.getByRole('dialog')
@@ -377,7 +414,7 @@ describe('administrator update entry', () => {
       expect(within(trigger).getByText('Update available')).toBeInTheDocument()
       expect(
         within(trigger).getByRole('status', { hidden: true })
-      ).toHaveTextContent('New version available: v1.0.0-rc.36')
+      ).toHaveTextContent('New version available: bbbbbbbbbbbb')
     }
   })
 
@@ -399,7 +436,7 @@ describe('administrator update entry', () => {
     expect(toastError).not.toHaveBeenCalled()
     await user.click(
       screen.getByRole('button', {
-        name: 'New version available: v1.0.0-rc.36',
+        name: 'New version available: bbbbbbbbbbbb',
       })
     )
     expect(
@@ -429,7 +466,7 @@ describe('version label presentation', () => {
     client.setQueryData(STATUS_QUERY_KEY, { version: release.tag_name })
     render(<SystemUpdateAction presentation='version' />, { wrapper: Wrapper })
     const trigger = screen.getByRole('button', {
-      name: 'System updates, current version: v1.0.0-rc.36',
+      name: 'System updates, current version: bbbbbbbbbbbb',
     })
     expect(trigger).toHaveAttribute('aria-busy', 'true')
     expect(within(trigger).getByText(release.tag_name)).toBeInTheDocument()
@@ -437,7 +474,7 @@ describe('version label presentation', () => {
       within(trigger).queryByText('Check for updates')
     ).not.toBeInTheDocument()
     await act(async () => {
-      finishRequest?.(new Response(JSON.stringify([release])))
+      finishRequest?.(new Response(JSON.stringify(commitPayload())))
     })
     await waitFor(() => expect(trigger).toHaveAttribute('aria-busy', 'false'))
     expect(within(trigger).getByText(release.tag_name)).toBeInTheDocument()
@@ -508,7 +545,10 @@ describe('version notification preferences', () => {
     client.clear()
     useSystemUpdateStore.setState({ snapshot: null })
     useSystemUpdateStore.persist.clearStorage()
-    useSystemUpdatePreferencesStore.setState({ ignoredVersionsByUserId: {} })
+    useSystemUpdatePreferencesStore.setState({
+    ignoredVersionsByUserId: {},
+    checksEnabled: true,
+  })
     localStorage.setItem('system-update-preferences:v1', String(saved))
     await useSystemUpdatePreferencesStore.persist.rehydrate()
     client = createAppQueryClient()
@@ -566,14 +606,15 @@ describe('version notification preferences', () => {
     expect(hook.result.current.release?.tag_name).toBe(release.tag_name)
     expect(hook.result.current.isIgnored).toBe(true)
     expect(hook.result.current.shouldNotify).toBe(false)
-    respondWithRelease('v1.0.0-rc.37')
+    const laterSha = 'c'.repeat(40)
+    respondWithCommit(laterSha)
     await act(async () => hook.result.current.checkNow())
     await waitFor(() =>
-      expect(hook.result.current.release?.tag_name).toBe('v1.0.0-rc.37')
+      expect(hook.result.current.release?.tag_name).toBe(laterSha.slice(0, 12))
     )
     expect(hook.result.current.shouldNotify).toBe(true)
     expect(hook.result.current.isIgnored).toBe(false)
-    respondWithRelease()
+    respondWithCommit()
     await act(async () => hook.result.current.checkNow())
     await waitFor(() =>
       expect(hook.result.current.release?.tag_name).toBe(release.tag_name)
@@ -657,7 +698,7 @@ describe('update cache and scheduling', () => {
   test('refreshes the server version during a later automatic check and clears an installed update', async () => {
     vi.useFakeTimers()
     fetchMock.mockImplementation(
-      async () => new Response(JSON.stringify([release]))
+      async () => new Response(JSON.stringify(commitPayload()))
     )
     const hook = renderHook(useSystemUpdate, { wrapper: Wrapper })
     await act(async () => {
@@ -730,7 +771,7 @@ describe('update cache and scheduling', () => {
   test('waits one hour across multiple consumers and stops polling after logout', async () => {
     vi.useFakeTimers()
     fetchMock.mockImplementation(
-      async () => new Response(JSON.stringify([release]))
+      async () => new Response(JSON.stringify(commitPayload()))
     )
     const first = renderHook(useSystemUpdate, { wrapper: Wrapper })
     await act(async () => {
@@ -760,7 +801,7 @@ describe('update cache and scheduling', () => {
   test('waits while hidden or offline and checks stale results after visibility or connectivity returns', async () => {
     vi.useFakeTimers()
     fetchMock.mockImplementation(
-      async () => new Response(JSON.stringify([release]))
+      async () => new Response(JSON.stringify(commitPayload()))
     )
     focusManager.setFocused(false)
     renderHook(useSystemUpdate, { wrapper: Wrapper })

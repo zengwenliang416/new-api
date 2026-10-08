@@ -100,11 +100,14 @@ const updatePreferencesSchema = z.object({
     z.string().regex(/^[1-9]\d*$/),
     z.array(z.string().min(1))
   ),
+  checksEnabled: z.boolean().optional(),
 })
 
 interface SystemUpdatePreferencesStore {
   ignoredVersionsByUserId: Record<string, string[]>
+  checksEnabled: boolean
   setVersionIgnored: (userId: number, tag: string, ignored: boolean) => void
+  setChecksEnabled: (enabled: boolean) => void
 }
 
 export const useSystemUpdatePreferencesStore =
@@ -112,6 +115,10 @@ export const useSystemUpdatePreferencesStore =
     persist(
       (set) => ({
         ignoredVersionsByUserId: {},
+        checksEnabled: true,
+        setChecksEnabled: (enabled) => {
+          set({ checksEnabled: enabled })
+        },
         setVersionIgnored: (userId, tag, ignored) => {
           set((state) => {
             const tags = state.ignoredVersionsByUserId[userId] ?? []
@@ -136,6 +143,7 @@ export const useSystemUpdatePreferencesStore =
         storage: createJSONStorage(() => updateStorage),
         partialize: (state) => ({
           ignoredVersionsByUserId: state.ignoredVersionsByUserId,
+          checksEnabled: state.checksEnabled,
         }),
         merge: (persisted, current) => {
           const parsed = updatePreferencesSchema.safeParse(persisted)
@@ -144,6 +152,10 @@ export const useSystemUpdatePreferencesStore =
             ignoredVersionsByUserId: parsed.success
               ? parsed.data.ignoredVersionsByUserId
               : {},
+            checksEnabled:
+              parsed.success && parsed.data.checksEnabled !== undefined
+                ? parsed.data.checksEnabled
+                : true,
           }
         },
       }

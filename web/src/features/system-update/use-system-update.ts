@@ -38,7 +38,7 @@ import {
   UpdateCheckError,
   type UpdateCheckErrorCode,
 } from './api'
-import { compareSystemVersions } from './releases'
+import { compareSystemVersions, deploymentHasUpdate, deploymentMatchesCommit } from './releases'
 import {
   subscribeSystemUpdatePreferences,
   useSystemUpdatePreferencesStore,
@@ -137,16 +137,20 @@ export function useSystemUpdate() {
   const online = useSyncExternalStore(onlineManager.subscribe, isBrowserOnline)
   const { status } = useStatus()
   const queryClient = useQueryClient()
+  const checksEnabled = useSyncExternalStore(
+    subscribeSystemUpdatePreferences,
+    () => useSystemUpdatePreferencesStore.getState().checksEnabled
+  )
   const query = useQuery({
     ...systemUpdateQueryOptions,
-    enabled: isAdmin && visible && online,
+    enabled: isAdmin && visible && online && checksEnabled,
   })
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!isAdmin || !checksEnabled) {
       void queryClient.cancelQueries({ queryKey: SYSTEM_UPDATE_QUERY_KEY })
     }
-  }, [isAdmin, queryClient])
+  }, [checksEnabled, isAdmin, queryClient])
 
   const version = status?.version?.trim()
   const currentVersion =
@@ -154,8 +158,15 @@ export function useSystemUpdate() {
       ? undefined
       : version || undefined
   const release = query.data?.release ?? null
-  const comparison = compareSystemVersions(currentVersion, release?.tag_name)
-  const hasUpdate = comparison === -1
+  const comparison = release?.commit_sha
+    ? null
+    : compareSystemVersions(currentVersion, release?.tag_name)
+  const matchesMain = deploymentMatchesCommit(
+    currentVersion,
+    release?.commit_sha
+  )
+  const hasUpdate =
+    checksEnabled && deploymentHasUpdate(currentVersion, release)
   const isIgnored = useSyncExternalStore(subscribeSystemUpdatePreferences, () =>
     Boolean(
       user &&
@@ -173,8 +184,13 @@ export function useSystemUpdate() {
       .setVersionIgnored(user.id, release.tag_name, ignored)
   }
 
+  const setChecksEnabled = (enabled: boolean) => {
+    if (!isAdmin) return
+    useSystemUpdatePreferencesStore.getState().setChecksEnabled(enabled)
+  }
+
   const checkNow = async () => {
-    if (!isAdmin || !online) return
+    if (!isAdmin || !online || !checksEnabled) return
     const result = await query.refetch({ cancelRefetch: false })
     if (result.data?.error) {
       handleServerError(new Error(getUpdateErrorMessage(result.data.error, t)))
@@ -186,8 +202,11 @@ export function useSystemUpdate() {
     release,
     comparison,
     hasUpdate,
+    matchesMain,
+    checksEnabled,
+    setChecksEnabled,
     isIgnored,
-    shouldNotify: isAdmin && hasUpdate && !isIgnored,
+    shouldNotify: isAdmin && checksEnabled && hasUpdate && !isIgnored,
     setIgnored,
     checking: query.isFetching,
     online,

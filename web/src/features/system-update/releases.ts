@@ -24,6 +24,10 @@ export const systemReleaseSchema = z.object({
   body: z.string().nullable().optional(),
   published_at: z.iso.datetime().nullable().optional(),
   prerelease: z.boolean(),
+  commit_sha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .optional(),
 })
 
 export type SystemRelease = z.infer<typeof systemReleaseSchema>
@@ -110,6 +114,70 @@ export function selectLatestRelease(payload: unknown): SystemRelease | null {
   return latest
 }
 
+const forkCommitSchema = z.object({
+  sha: z.string().regex(/^[0-9a-f]{40}$/),
+  commit: z.object({
+    message: z.string().optional(),
+    committer: z
+      .object({
+        date: z.string().optional(),
+      })
+      .optional(),
+  }),
+})
+
+/** The deployment version records a short commit after '+' when it is not an exact tag. */
+export function deploymentBuild(
+  version: string | null | undefined
+): string | null {
+  const match = version?.trim().match(/\+([0-9a-fA-F]{7,40})$/)
+  return match ? match[1].toLowerCase() : null
+}
+
+export function deploymentMatchesCommit(
+  version: string | null | undefined,
+  sha: string | null | undefined
+): boolean {
+  const build = deploymentBuild(version)
+  const remote = sha?.trim().toLowerCase() ?? ''
+  if (!build || !/^[0-9a-f]{40}$/.test(remote)) return false
+  return remote.startsWith(build)
+}
+
+export function deploymentHasUpdate(
+  currentVersion: string | null | undefined,
+  release: SystemRelease | null
+): boolean {
+  if (!currentVersion || !release) return false
+  if (release.commit_sha) {
+    if (deploymentMatchesCommit(currentVersion, release.commit_sha)) return false
+    if (deploymentBuild(currentVersion)) return true
+    return parseSystemVersion(currentVersion) !== null
+  }
+  return compareSystemVersions(currentVersion, release.tag_name) === -1
+}
+
+export function parseForkCommit(payload: unknown): SystemRelease {
+  const parsed = forkCommitSchema.safeParse(payload)
+  if (!parsed.success) throw new Error('Unexpected release payload')
+  const message = parsed.data.commit.message?.trim() ?? ''
+  const date = parsed.data.commit.committer?.date
+  const published =
+    date && z.iso.datetime().safeParse(date).success ? date : undefined
+  const subject = message.split('\n', 1)[0]
+  return {
+    tag_name: parsed.data.sha.slice(0, 12),
+    name: subject || null,
+    body: message || null,
+    published_at: published,
+    prerelease: false,
+    commit_sha: parsed.data.sha,
+  }
+}
+
 export function getSystemReleaseUrl(release: SystemRelease): string {
+  if (release.commit_sha) {
+    return `https://github.com/zengwenliang416/new-api/commit/${release.commit_sha}`
+  }
   return `https://github.com/QuantumNous/new-api/releases/tag/${encodeURIComponent(release.tag_name)}`
 }

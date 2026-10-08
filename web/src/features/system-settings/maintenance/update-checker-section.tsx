@@ -19,10 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import { useTranslation } from 'react-i18next'
 
 import { SystemUpdateAction } from '@/features/system-update/system-update-action'
+import { useSystemUpdatePreferencesStore } from '@/features/system-update/store'
 import { useStatus } from '@/hooks/use-status'
 import { formatTimestamp } from '@/lib/format'
 
 import { SettingsSection } from '../components/settings-section'
+import { SettingsSwitchField } from '../components/settings-form-layout'
 
 type UpdateCheckerSectionProps = {
   currentVersion?: string | null
@@ -32,6 +34,12 @@ type UpdateCheckerSectionProps = {
 export function UpdateCheckerSection(props: UpdateCheckerSectionProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
+  const checksEnabled = useSystemUpdatePreferencesStore(
+    (state) => state.checksEnabled
+  )
+  const setChecksEnabled = useSystemUpdatePreferencesStore(
+    (state) => state.setChecksEnabled
+  )
   const uptime = props.startTime
     ? formatTimestamp(props.startTime)
     : t('Unknown')
@@ -54,6 +62,15 @@ export function UpdateCheckerSection(props: UpdateCheckerSectionProps) {
             <div className='text-lg font-semibold'>{uptime}</div>
           </div>
         </div>
+        <SettingsSwitchField
+          controlId='system-update-checks'
+          checked={checksEnabled}
+          onCheckedChange={setChecksEnabled}
+          label={t('Compare the running build with main')}
+          description={t(
+            'Hourly check against the main branch. Turn this off to stop the request.'
+          )}
+        />
         <SystemUpdateAction compact={false} />
       </div>
     </SettingsSection>

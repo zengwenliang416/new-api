@@ -18,7 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import { compareSystemVersions, selectLatestRelease } from '../releases'
+import {
+  compareSystemVersions,
+  deploymentHasUpdate,
+  deploymentMatchesCommit,
+  parseForkCommit,
+  selectLatestRelease,
+} from '../releases'
 
 describe('system release ordering', () => {
   test.each([
@@ -66,6 +72,53 @@ describe('system release ordering', () => {
         { tag_name: 'v2.0.0', draft: true, prerelease: false },
       ])
     ).toBeNull()
+  })
+
+  test('matches a deployment build to main only by the commit suffix', () => {
+    const sha = '8639340696f4f3bbe2c461b765c215116aea2960'
+    const release = {
+      tag_name: sha.slice(0, 12),
+      prerelease: false,
+      commit_sha: sha,
+    }
+    expect(deploymentMatchesCommit(`v1.0.0-rc.41+${sha.slice(0, 12)}`, sha)).toBe(
+      true
+    )
+    expect(deploymentMatchesCommit('v1.0.0-rc.41+338a25f64a74', sha)).toBe(false)
+    expect(deploymentMatchesCommit(sha, sha)).toBe(false)
+    expect(deploymentHasUpdate(`v1.0.0-rc.41+${sha.slice(0, 12)}`, release)).toBe(
+      false
+    )
+    expect(deploymentHasUpdate('v1.0.0-rc.41+338a25f64a74', release)).toBe(true)
+    expect(deploymentHasUpdate('v1.0.0-rc.35', release)).toBe(true)
+    expect(deploymentHasUpdate(sha, release)).toBe(false)
+    expect(deploymentHasUpdate(undefined, release)).toBe(false)
+    expect(
+      deploymentHasUpdate('v1.0.0-rc.35', {
+        tag_name: 'v1.0.0-rc.36',
+        prerelease: true,
+      })
+    ).toBe(true)
+  })
+
+  test('reads the fork main commit instead of a release list', () => {
+    const sha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    expect(
+      parseForkCommit({
+        sha,
+        commit: {
+          message: 'Ship the fork\n\nDetails',
+          committer: { date: '2026-10-08T03:02:06Z' },
+        },
+      })
+    ).toMatchObject({
+      tag_name: sha.slice(0, 12),
+      commit_sha: sha,
+      prerelease: false,
+      body: 'Ship the fork\n\nDetails',
+    })
+    expect(() => parseForkCommit([])).toThrow()
+    expect(() => parseForkCommit({ sha: 'short' })).toThrow()
   })
 
   test('rejects malformed payloads instead of reporting that the system is current', () => {
