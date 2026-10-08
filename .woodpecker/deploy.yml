@@ -1,0 +1,34 @@
+clone:
+  git:
+    image: woodpeckerci/plugin-git:2.10.0
+    settings:
+      partial: false
+      depth: 1
+
+labels:
+  location: production-80
+  repo: zengwenliang416/new-api
+
+# Push is added after the first manual production deploy succeeds.
+when:
+  - event: manual
+    branch: main
+
+concurrency:
+  limit: 1
+  group: new-api-production-80
+
+steps:
+  - name: deploy-production
+    image: docker:29-cli
+    environment:
+      DOCKER_CONFIG: /docker-config
+    commands:
+      - apk add --no-cache bash
+      - bash -n ops/woodpecker/deploy.sh
+      - bash ops/woodpecker/deploy.sh
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/new-api:/root/new-api
+      - /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose:ro
+      - /root/.docker/new-api-ci:/docker-config:ro

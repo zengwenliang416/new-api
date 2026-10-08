@@ -1,0 +1,29 @@
+clone:
+  git:
+    image: woodpeckerci/plugin-git:2.10.0
+    settings:
+      partial: false
+      depth: 1
+
+labels:
+  location: production-80
+  repo: zengwenliang416/new-api
+
+when:
+  - event: pull_request
+
+concurrency:
+  limit: 1
+  group: new-api-verify
+
+steps:
+  - name: compile-backend
+    image: golang:1.26-bookworm
+    environment:
+      GOWORK: "off"
+    commands:
+      - mkdir -p web/dist
+      - touch web/dist/index.html
+      - go build -o /tmp/new-api .
+      - (cd relaykit && go build ./...)
+      - (cd tokenkit && go build ./...)
