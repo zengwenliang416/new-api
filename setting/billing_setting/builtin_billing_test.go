@@ -110,6 +110,42 @@ func TestGPT6AstraBuiltinBilling(t *testing.T) {
 	}
 }
 
+func TestJevBuiltinBillingChargesInputOnly(t *testing.T) {
+	settings := config.GlobalConfig.Get("billing_setting").(*billing_setting.BillingSetting)
+	saved := *settings
+	savedRatios, savedPrices := ratio_setting.ModelRatio2JSONString(), ratio_setting.ModelPrice2JSONString()
+	t.Cleanup(func() {
+		*settings = saved
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedRatios))
+		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
+	})
+	for _, name := range []string{"jev-1.13.0", "jev-latest", "jev-preview"} {
+		t.Run(name, func(t *testing.T) {
+			*settings = billing_setting.BillingSetting{BillingMode: map[string]string{}, BillingExpr: map[string]string{}}
+			require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{}`))
+			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{}`))
+			assert.Equal(t, billing_setting.BillingModeTieredExpr, billing_setting.GetBillingMode(name))
+			expression, ok := billing_setting.GetBillingExpr(name)
+			require.True(t, ok)
+			assert.Equal(t, `tier("standard", p * 0.042)`, expression)
+
+			usage := &dto.Usage{PromptTokens: 1000, CompletionTokens: 100000, TotalTokens: 101000}
+			result, err := billingexpr.ComputeTieredQuota(&billingexpr.BillingSnapshot{
+				ExprString: expression, ExprHash: billingexpr.ExprHashString(expression), GroupRatio: 1, QuotaPerUnit: 500000,
+			}, service.BuildTieredTokenParams(usage, false, billingexpr.UsedVars(expression)))
+			require.NoError(t, err)
+			assert.Equal(t, 21, result.ActualQuotaAfterGroup)
+
+			million := &dto.Usage{PromptTokens: 1_000_000, CompletionTokens: 97, TotalTokens: 1_000_097}
+			result, err = billingexpr.ComputeTieredQuota(&billingexpr.BillingSnapshot{
+				ExprString: expression, ExprHash: billingexpr.ExprHashString(expression), GroupRatio: 1, QuotaPerUnit: 500000,
+			}, service.BuildTieredTokenParams(million, false, billingexpr.UsedVars(expression)))
+			require.NoError(t, err)
+			assert.Equal(t, 21000, result.ActualQuotaAfterGroup)
+		})
+	}
+}
+
 func TestImageModelBuiltinPricesAndOverrides(t *testing.T) {
 	settings := config.GlobalConfig.Get("billing_setting").(*billing_setting.BillingSetting)
 	saved := *settings

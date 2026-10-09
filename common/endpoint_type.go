@@ -41,6 +41,9 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 			constant.EndpointTypeGemini,
 			constant.EndpointTypeOpenAIAlphaSearch,
 		}
+	case constant.ChannelTypeJev:
+		// System One is not an OpenAI surface. Do not advertise chat or image routes.
+		return []constant.EndpointType{constant.EndpointTypeJev}
 	case constant.ChannelTypeCodex:
 		endpointTypes = []constant.EndpointType{
 			constant.EndpointTypeOpenAIResponse,

@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,6 +42,8 @@ func GetAndValidateRequest(c *gin.Context, format types.RelayFormat) (request dt
 		request, err = GetAndValidateResponsesCompactionRequest(c)
 	case types.RelayFormatOpenAIAlphaSearch:
 		request, err = GetAndValidateAlphaSearchRequest(c)
+	case types.RelayFormatTypeSafeSystemOne:
+		request, err = GetAndValidateSystemOneRequest(c)
 
 	case types.RelayFormatOpenAIImage:
 		request, err = GetAndValidOpenAIImageRequest(c, relayMode)
@@ -147,6 +150,38 @@ func GetAndValidateResponsesRequest(c *gin.Context) (*dto.OpenAIResponsesRequest
 	if ExceedsMaxTokensLimit(request.MaxOutputTokens) {
 		return nil, errors.New("max_output_tokens is invalid")
 	}
+	return request, nil
+}
+
+func GetAndValidateSystemOneRequest(c *gin.Context) (*dto.SystemOneRequest, error) {
+	request := &dto.SystemOneRequest{}
+	if err := common.UnmarshalBodyReusable(c, request); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(request.Model) == "" {
+		return nil, errors.New("model is required")
+	}
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return nil, err
+	}
+	rawBody, err := storage.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	var top map[string]json.RawMessage
+	if err := common.Unmarshal(rawBody, &top); err != nil {
+		return nil, err
+	}
+	state := bytes.TrimSpace(top["state"])
+	if len(state) == 0 || bytes.Equal(state, []byte("null")) {
+		return nil, errors.New("state is required")
+	}
+	questions := bytes.TrimSpace(top["questions"])
+	if len(questions) == 0 || questions[0] != '{' {
+		return nil, errors.New("questions must be an object")
+	}
+	request.RawBody = append([]byte(nil), rawBody...)
 	return request, nil
 }
 

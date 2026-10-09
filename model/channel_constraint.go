@@ -2,6 +2,7 @@ package model
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
@@ -92,6 +93,15 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 	case dto.FilterRequestPath:
 		if filter.RequestPath == "" {
 			return true
+		}
+		// System One is a separate protocol. Only a JEV channel may be selected
+		// for it, and a JEV channel must not answer chat or other relay paths.
+		systemOne := filter.RequestPath == "/v1/systemone" || strings.HasPrefix(filter.RequestPath, "/v1/systemone/")
+		if ch.Type == constant.ChannelTypeJev {
+			return systemOne
+		}
+		if systemOne {
+			return false
 		}
 		if !constant.IsAdvancedCustomChannel(ch.Type) {
 			return true

@@ -20,6 +20,7 @@ import {
   CHANNEL_TYPES,
   CHANNEL_TYPE_VLLM,
   CHANNEL_TYPE_SGLANG,
+  CHANNEL_TYPE_JEV,
 } from '../constants'
 
 // ============================================================================
@@ -49,6 +50,15 @@ export interface ChannelTypeConfig {
  * Configuration for each channel type
  */
 export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
+  [CHANNEL_TYPE_JEV]: {
+    id: CHANNEL_TYPE_JEV,
+    name: CHANNEL_TYPES[CHANNEL_TYPE_JEV],
+    icon: 'JEV',
+    hints: {
+      key: 'TypeSafe API key',
+      models: 'jev-1.13.0,jev-latest,jev-preview',
+    },
+  },
   [CHANNEL_TYPE_SGLANG]: {
     id: CHANNEL_TYPE_SGLANG,
     name: CHANNEL_TYPES[CHANNEL_TYPE_SGLANG],

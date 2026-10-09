@@ -116,6 +116,11 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAIAlphaSearch)
 		})
 
+		// TypeSafe System One. The body is not an OpenAI chat request.
+		httpRouter.POST("/systemone", func(c *gin.Context) {
+			controller.Relay(c, types.RelayFormatTypeSafeSystemOne)
+		})
+
 		// image related routes. /images/generations and /images/edits are
 		// host protocol endpoints (openai_image) registered by
 		// SetTaskPluginProtocolRouter; unclaimed models fall back to Relay.

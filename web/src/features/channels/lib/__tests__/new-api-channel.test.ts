@@ -20,6 +20,8 @@ import { describe, expect, test } from 'vitest'
 
 import type { TaskPluginOption } from '../../api'
 import {
+  CHANNEL_PROVIDER_PRESENTATION,
+  CHANNEL_TYPE_JEV,
   CHANNEL_TYPE_NEW_API,
   CHANNEL_TYPE_VLLM,
   CHANNEL_TYPE_SGLANG,
@@ -151,6 +153,36 @@ describe.each([
       models: 'deepseek-v4-flash-vision-exp',
       key: 'EMPTY',
     })
+  })
+})
+
+describe('JEV channel', () => {
+  test('can be selected and forwards System One without model discovery', () => {
+    const jevIndex = CHANNEL_TYPE_OPTIONS.findIndex(
+      (item) => item.value === CHANNEL_TYPE_JEV
+    )
+
+    expect(CHANNEL_TYPE_OPTIONS[jevIndex]).toEqual({
+      value: CHANNEL_TYPE_JEV,
+      label: 'JEV',
+    })
+    expect(jevIndex).toBe(
+      CHANNEL_TYPE_OPTIONS.findIndex((item) => item.value === 43) + 1
+    )
+    expect(MODEL_FETCHABLE_TYPES.has(CHANNEL_TYPE_JEV)).toBe(false)
+    expect(getChannelTypeIcon(CHANNEL_TYPE_JEV)).toBe('JEV')
+    expect(getChannelTypeConfig(CHANNEL_TYPE_JEV).icon).toBe('JEV')
+    expect(getKeyPromptForType(CHANNEL_TYPE_JEV)).toBe('TypeSafe API key')
+    expect(
+      CHANNEL_PROVIDER_PRESENTATION[CHANNEL_TYPE_JEV]?.descriptionKey
+    ).toBe('Forward TypeSafe System One requests to Jev')
+    expect(
+      channelFormSchema.safeParse({
+        ...newAPIForm(''),
+        type: CHANNEL_TYPE_JEV,
+        models: 'jev-1.13.0',
+      }).success
+    ).toBe(true)
   })
 })
 

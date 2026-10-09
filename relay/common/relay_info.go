@@ -722,6 +722,11 @@ func GenRelayInfo(c *gin.Context, relayFormat types.RelayFormat, request dto.Req
 			return GenRelayInfoAlphaSearch(c, request), nil
 		}
 		return nil, errors.New("request is not a AlphaSearchRequest")
+	case types.RelayFormatTypeSafeSystemOne:
+		if request, ok := request.(*dto.SystemOneRequest); ok {
+			return GenRelayInfoSystemOne(c, request), nil
+		}
+		return nil, errors.New("request is not a SystemOneRequest")
 	case types.RelayFormatTask:
 		info = genBaseRelayInfo(c, nil)
 		info.TaskRelayInfo = &TaskRelayInfo{}
@@ -793,6 +798,15 @@ func GenRelayInfoResponsesCompaction(c *gin.Context, request *dto.OpenAIResponse
 		info.RelayMode = relayconstant.RelayModeResponsesCompact
 	}
 	info.RelayFormat = types.RelayFormatOpenAIResponsesCompaction
+	return info
+}
+
+func GenRelayInfoSystemOne(c *gin.Context, request *dto.SystemOneRequest) *RelayInfo {
+	info := genBaseRelayInfo(c, request)
+	if info.RelayMode == relayconstant.RelayModeUnknown {
+		info.RelayMode = relayconstant.RelayModeSystemOne
+	}
+	info.RelayFormat = types.RelayFormatTypeSafeSystemOne
 	return info
 }
 

@@ -215,4 +215,26 @@ func TestChannelSatisfiesFilters(t *testing.T) {
 	}})
 	assert.False(t, ok)
 	assert.Equal(t, dto.FilterRequestPath, kind)
+
+	jevChannel := &Channel{Id: 4, Type: constant.ChannelTypeJev}
+	ok, kind = ChannelSatisfiesFilters(jevChannel, "jev-1.13.0", []dto.ChannelFilter{{
+		Kind:        dto.FilterRequestPath,
+		RequestPath: "/v1/systemone",
+	}})
+	require.True(t, ok)
+	assert.Equal(t, dto.ChannelFilterKind(""), kind)
+
+	ok, kind = ChannelSatisfiesFilters(jevChannel, "jev-1.13.0", []dto.ChannelFilter{{
+		Kind:        dto.FilterRequestPath,
+		RequestPath: "/v1/chat/completions",
+	}})
+	assert.False(t, ok)
+	assert.Equal(t, dto.FilterRequestPath, kind)
+
+	ok, kind = ChannelSatisfiesFilters(ordinary, "jev-1.13.0", []dto.ChannelFilter{{
+		Kind:        dto.FilterRequestPath,
+		RequestPath: "/v1/systemone",
+	}})
+	assert.False(t, ok)
+	assert.Equal(t, dto.FilterRequestPath, kind)
 }
