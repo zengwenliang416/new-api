@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/support_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +39,54 @@ var completionRatioMetaOptionKeys = []string{
 
 func isPaymentComplianceOptionKey(key string) bool {
 	return strings.HasPrefix(key, "payment_setting.compliance_")
+}
+
+func validateSupportWorkerOption(key string, value string) string {
+	switch key {
+	case "SupportWorkerUrl":
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return ""
+		}
+		parsed, err := url.Parse(trimmed)
+		if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return i18n.MsgSupportWorkerUrlInvalid
+		}
+		if parsed.Scheme == "http" && !isSupportWorkerLocalHost(parsed.Hostname()) {
+			return i18n.MsgSupportWorkerUrlRequiresHttps
+		}
+	case "SupportWorkerJwtSecret", "SupportWorkerCallbackSecret":
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" && len(trimmed) < support_setting.MinSecretLength {
+			return i18n.MsgSupportWorkerSecretTooShort
+		}
+	case "SupportWorkerSiteID":
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return i18n.MsgSupportWorkerSiteIDRequired
+		}
+		if len([]rune(trimmed)) > support_setting.MaxSiteIDLength {
+			return i18n.MsgSupportWorkerSiteIDTooLong
+		}
+	case "SupportWorkerTranslationEnabled":
+		if value != "true" && value != "false" {
+			return i18n.MsgInvalidParams
+		}
+	case "SupportWorkerSessionTTLMinutes":
+		minutes, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || minutes < support_setting.MinSessionTTLMinutes || minutes > support_setting.MaxSessionTTLMinutes {
+			return i18n.MsgSupportWorkerTTLInvalid
+		}
+	}
+	return ""
+}
+
+func isSupportWorkerLocalHost(host string) bool {
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
 }
 
 func isPositiveOptionValue(value string) bool {
@@ -215,6 +265,12 @@ func UpdateOption(c *gin.Context) {
 	if option.Key == "TaskPublicAddress" && option.Value.(string) != "" {
 		if err := service.ValidateTaskArtifactBaseURL(option.Value.(string)); err != nil {
 			common.ApiErrorMsg(c, err.Error())
+			return
+		}
+	}
+	if strings.HasPrefix(option.Key, "SupportWorker") {
+		if messageKey := validateSupportWorkerOption(option.Key, option.Value.(string)); messageKey != "" {
+			common.ApiErrorI18n(c, messageKey)
 			return
 		}
 	}

@@ -42,6 +42,11 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	// router/api-router.go: top level
+	// Support credentials are bound to a revocable browser login session.
+	"GET /api/support/session": accessTokenSessionRule,
+	// Deployment operations retain their existing browser-session-only access.
+	"GET /api/deploy/release":             accessTokenSessionRule,
+	"POST /api/deploy/rollback":           accessTokenSessionRule,
 	"GET /api/models":                     accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
 	"GET /api/pricing":                    accessTokenAnyRule,

@@ -334,6 +334,33 @@ func Register(c *gin.Context) {
 	return
 }
 
+// supportUserSummary is the read-only customer view. Never serialize model.User
+// for support staff: Setting and future model fields can contain credentials.
+type supportUserSummary struct {
+	Id           int            `json:"id"`
+	Username     string         `json:"username"`
+	DisplayName  string         `json:"display_name"`
+	Role         int            `json:"role"`
+	Status       int            `json:"status"`
+	Email        string         `json:"email"`
+	Quota        int            `json:"quota"`
+	UsedQuota    int            `json:"used_quota"`
+	RequestCount int            `json:"request_count"`
+	Group        string         `json:"group"`
+	CreatedAt    int64          `json:"created_at"`
+	LastLoginAt  int64          `json:"last_login_at"`
+	DeletedAt    gorm.DeletedAt `json:"DeletedAt"`
+}
+
+func supportUserSummaryFor(user *model.User) supportUserSummary {
+	return supportUserSummary{
+		Id: user.Id, Username: user.Username, DisplayName: user.DisplayName,
+		Role: user.Role, Status: user.Status, Email: user.Email, Quota: user.Quota,
+		UsedQuota: user.UsedQuota, RequestCount: user.RequestCount, Group: user.Group,
+		CreatedAt: user.CreatedAt, LastLoginAt: user.LastLoginAt, DeletedAt: user.DeletedAt,
+	}
+}
+
 func GetAllUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
@@ -344,7 +371,15 @@ func GetAllUsers(c *gin.Context) {
 	}
 
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(users)
+	if c.GetInt("role") == common.RoleSupportUser {
+		summaries := make([]supportUserSummary, 0, len(users))
+		for _, user := range users {
+			summaries = append(summaries, supportUserSummaryFor(user))
+		}
+		pageInfo.SetItems(summaries)
+	} else {
+		pageInfo.SetItems(users)
+	}
 
 	common.ApiSuccess(c, pageInfo)
 	return
@@ -374,7 +409,15 @@ func SearchUsers(c *gin.Context) {
 	}
 
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(users)
+	if c.GetInt("role") == common.RoleSupportUser {
+		summaries := make([]supportUserSummary, 0, len(users))
+		for _, user := range users {
+			summaries = append(summaries, supportUserSummaryFor(user))
+		}
+		pageInfo.SetItems(summaries)
+	} else {
+		pageInfo.SetItems(users)
+	}
 	common.ApiSuccess(c, pageInfo)
 	return
 }
@@ -397,6 +440,10 @@ func GetUser(c *gin.Context) {
 	myRole := c.GetInt("role")
 	if !canManageTargetRole(myRole, user.Role) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionSameLevel)
+		return
+	}
+	if myRole == common.RoleSupportUser {
+		common.ApiSuccess(c, supportUserSummaryFor(user))
 		return
 	}
 	user.AdminPermissions = authz.Capabilities(user.Id, user.Role)
@@ -531,8 +578,8 @@ func calculateUserPermissions(userRole int) map[string]any {
 		// 超级管理员不需要边栏设置功能
 		permissions["sidebar_settings"] = false
 		permissions["sidebar_modules"] = map[string]any{}
-	} else if userRole == common.RoleAdminUser {
-		// 管理员可以设置边栏，但不包含系统设置功能
+	} else if userRole == common.RoleAdminUser || userRole == common.RoleSupportUser {
+		// 管理员/客服可以设置边栏，但不包含系统设置功能
 		permissions["sidebar_settings"] = true
 		permissions["sidebar_modules"] = map[string]any{
 			"admin": map[string]any{
@@ -575,6 +622,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 	defaultConfig["personal"] = map[string]any{
 		"enabled":  true,
 		"topup":    true,
+		"support":  true,
 		"personal": true,
 	}
 
@@ -587,7 +635,19 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"models":     true,
 			"redemption": true,
 			"user":       true,
+			"support":    true,
 			"setting":    false, // 管理员不能访问系统设置
+		}
+	} else if userRole == common.RoleSupportUser {
+		// 客服只能访问用户列表与工单管理
+		defaultConfig["admin"] = map[string]any{
+			"enabled":    true,
+			"channel":    false,
+			"models":     false,
+			"redemption": false,
+			"user":       true,
+			"support":    true,
+			"setting":    false,
 		}
 	} else if userRole == common.RoleRootUser {
 		// 超级管理员可以访问所有功能
@@ -597,6 +657,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"models":     true,
 			"redemption": true,
 			"user":       true,
+			"support":    true,
 			"setting":    true,
 		}
 	}
@@ -1018,8 +1079,8 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 	auditParams := map[string]any{"role": user.Role}
-	// Creating an administrator grants privilege just like promoting one.
-	if user.Role >= common.RoleAdminUser {
+	// Creating support staff or administrators grants access to other users.
+	if user.Role >= common.RoleSupportUser {
 		authorization := requireAdminUserProof(c, service.VerificationScopeAdminUserCreate, service.AdminUserCreateContext{Role: user.Role})
 		if authorization == nil {
 			return
@@ -1165,6 +1226,16 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleAdminUser
+	case "promote_support":
+		if user.Role == common.RoleSupportUser {
+			common.ApiErrorI18n(c, i18n.MsgUserAlreadySupport)
+			return
+		}
+		if user.Role != common.RoleCommonUser {
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+			return
+		}
+		user.Role = common.RoleSupportUser
 	case "demote":
 		if user.Role == common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDemoteRootUser)

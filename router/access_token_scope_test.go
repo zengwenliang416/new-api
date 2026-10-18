@@ -55,6 +55,11 @@ var accessTokenExemptRoutes = []string{
 	"POST /api/user/auth/refresh",
 	"POST /api/user/auth/logout",
 
+	// Worker callbacks authenticate with their dedicated shared credential,
+	// and verify additionally validates the bound live browser session.
+	"POST /api/support/worker/verify",
+	"POST /api/support/worker/notify",
+
 	// Payment callbacks.
 	"POST /api/stripe/webhook",
 	"POST /api/creem/webhook",

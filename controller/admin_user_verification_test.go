@@ -217,7 +217,7 @@ func TestCreateUserRejectsNonStandardRole(t *testing.T) {
 		role         int
 		operatorRole int
 	}{
-		{"between common and admin", 5, common.RoleAdminUser},
+		{"between common and support", 4, common.RoleAdminUser},
 		{"negative", -1, common.RoleAdminUser},
 		{"between admin and root", 99, common.RoleRootUser},
 	} {

@@ -205,6 +205,12 @@ func UserCriticalRateLimit(scope string) func(c *gin.Context) {
 	)
 }
 
+// SupportWorkerUserRateLimit runs only after a callback secret is verified and
+// its user ID parsed. Shared Worker egress must not couple unrelated users.
+func SupportWorkerUserRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(120, 60, "SUPPORT_VERIFY")
+}
+
 func DownloadRateLimit() func(c *gin.Context) {
 	return rateLimitFactory(common.DownloadRateLimitNum, common.DownloadRateLimitDuration, "DW")
 }

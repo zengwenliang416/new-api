@@ -20,8 +20,14 @@ func SetApiRouter(router *gin.Engine) {
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
 	apiRouter.Use(middleware.AccessTokenAudit())
 	apiRouter.Use(middleware.BodyStorageCleanup()) // 清理请求体存储
-	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	anonymousRequestBodyLimit := middleware.AnonymousRequestBodyLimit()
+	// Authenticated Worker traffic must not share the public per-IP bucket:
+	// one Worker address represents all support users. Verify has its own user budget.
+	workerCallbacks := apiRouter.Group("/support/worker")
+	workerCallbacks.Use(middleware.DisableCache(), anonymousRequestBodyLimit)
+	workerCallbacks.POST("/verify", controller.SupportWorkerVerify)
+	workerCallbacks.POST("/notify", controller.SupportWorkerNotify)
+	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	{
 		apiRouter.GET("/setup", controller.GetSetup)
 		apiRouter.POST("/setup", anonymousRequestBodyLimit, controller.PostSetup)
@@ -71,6 +77,13 @@ func SetApiRouter(router *gin.Engine) {
 		// Universal secure verification routes
 		apiRouter.GET("/verify/methods", middleware.UserAuth(), middleware.DisableCache(), controller.GetVerificationMethods)
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("security-verification"), middleware.DisableCache(), controller.UniversalVerify)
+
+		// Support center worker session (browser calls the worker directly with this token)
+		supportRoute := apiRouter.Group("/support")
+		supportRoute.Use(middleware.UserAuth())
+		{
+			supportRoute.GET("/session", middleware.DisableCache(), controller.GetSupportSession)
+		}
 
 		userRoute := apiRouter.Group("/user")
 		{
@@ -150,17 +163,24 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.DELETE("/oauth/bindings/:provider_id", controller.UnbindCustomOAuth)
 			}
 
+			userReadRoute := userRoute.Group("/")
+			userReadRoute.Use(middleware.SupportAuth())
+			{
+				// Read-only user lookup is shared with support staff so they can
+				// resolve ticket owners from the support center.
+				userReadRoute.GET("/", controller.GetAllUsers)
+				userReadRoute.GET("/search", controller.SearchUsers)
+				userReadRoute.GET("/:id", controller.GetUser)
+			}
+
 			adminRoute := userRoute.Group("/")
 			adminRoute.Use(middleware.AdminAuth())
 			{
-				adminRoute.GET("/", controller.GetAllUsers)
 				adminRoute.GET("/topup", controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
-				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
-				adminRoute.GET("/:id", controller.GetUser)
 				adminRoute.POST("/", controller.CreateUser)
 				adminRoute.POST("/manage", controller.ManageUser)
 				adminRoute.PUT("/", controller.UpdateUser)

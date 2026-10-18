@@ -135,6 +135,14 @@ func UserAuth() func(c *gin.Context) {
 	}
 }
 
+// SupportAuth allows support staff (and administrators) to reach read-only
+// user lookup endpoints used by the support center.
+func SupportAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		authHelper(c, common.RoleSupportUser)
+	}
+}
+
 func AdminAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleAdminUser)

@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/support_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"gorm.io/gorm"
 )
@@ -85,6 +86,12 @@ func InitOptionMap() {
 	common.OptionMap["WorkerUrl"] = system_setting.WorkerUrl
 	common.OptionMap["WorkerValidKey"] = system_setting.WorkerValidKey
 	common.OptionMap["WorkerAllowHttpImageRequestEnabled"] = strconv.FormatBool(system_setting.WorkerAllowHttpImageRequestEnabled)
+	common.OptionMap["SupportWorkerUrl"] = support_setting.WorkerUrl
+	common.OptionMap["SupportWorkerJwtSecret"] = support_setting.JwtSecret
+	common.OptionMap["SupportWorkerCallbackSecret"] = support_setting.CallbackSecret
+	common.OptionMap["SupportWorkerSiteID"] = support_setting.SiteID
+	common.OptionMap["SupportWorkerSessionTTLMinutes"] = strconv.Itoa(support_setting.SessionTTLMinutes)
+	common.OptionMap["SupportWorkerTranslationEnabled"] = strconv.FormatBool(support_setting.TranslationEnabled)
 	common.OptionMap["PayAddress"] = ""
 	common.OptionMap["CustomCallbackAddress"] = ""
 	common.OptionMap["EpayId"] = ""
@@ -489,6 +496,18 @@ func updateOptionMap(key string, value string) (err error) {
 		system_setting.WorkerUrl = value
 	case "WorkerValidKey":
 		system_setting.WorkerValidKey = value
+	case "SupportWorkerUrl":
+		support_setting.WorkerUrl = strings.TrimRight(strings.TrimSpace(value), "/")
+	case "SupportWorkerJwtSecret":
+		support_setting.JwtSecret = value
+	case "SupportWorkerCallbackSecret":
+		support_setting.CallbackSecret = value
+	case "SupportWorkerSiteID":
+		support_setting.SiteID = support_setting.NormalizeSiteID(value)
+	case "SupportWorkerSessionTTLMinutes":
+		support_setting.SessionTTLMinutes = support_setting.NormalizeSessionTTLMinutes(value)
+	case "SupportWorkerTranslationEnabled":
+		support_setting.TranslationEnabled, _ = strconv.ParseBool(strings.TrimSpace(value))
 	case "PayAddress":
 		operation_setting.PayAddress = value
 	case "Chats":

@@ -106,6 +106,7 @@ const (
 	MsgUserCannotDisableRootUser     = "user.cannot_disable_root_user"
 	MsgUserCannotDemoteRootUser      = "user.cannot_demote_root_user"
 	MsgUserAlreadyAdmin              = "user.already_admin"
+	MsgUserAlreadySupport            = "user.already_support"
 	MsgUserAlreadyCommon             = "user.already_common"
 	MsgUserAdminCannotPromote        = "user.admin_cannot_promote"
 	MsgUserOriginalPasswordError     = "user.original_password_error"
@@ -174,6 +175,16 @@ const (
 	MsgTopupOrderStatus    = "topup.order_status"
 	MsgTopupFailed         = "topup.failed"
 	MsgTopupInvalidQuota   = "topup.invalid_quota"
+)
+
+// Support worker related messages
+const (
+	MsgSupportWorkerUrlInvalid       = "support.worker_url_invalid"
+	MsgSupportWorkerUrlRequiresHttps = "support.worker_url_requires_https"
+	MsgSupportWorkerSecretTooShort   = "support.worker_secret_too_short"
+	MsgSupportWorkerSiteIDRequired   = "support.worker_site_id_required"
+	MsgSupportWorkerSiteIDTooLong    = "support.worker_site_id_too_long"
+	MsgSupportWorkerTTLInvalid       = "support.worker_ttl_invalid"
 )
 
 // Channel related messages
