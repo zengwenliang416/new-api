@@ -47,6 +47,8 @@ export function MonitoringTimeRange(props: {
   value: string
   onValueChange: (value: string) => void
   intelligence?: boolean
+  onRefresh?: () => void
+  refreshing?: boolean
 }) {
   const { t } = useTranslation()
   const ranges = props.intelligence ? ['24h', '3d'] : ['1h', '24h', '7d']
@@ -76,8 +78,11 @@ export function MonitoringTimeRange(props: {
         variant='outline'
         size='icon'
         className='rounded-sm'
-        disabled
-        aria-label={t('Refresh unavailable in preview')}
+        disabled={!props.onRefresh || props.refreshing}
+        onClick={props.onRefresh}
+        aria-label={
+          props.onRefresh ? t('Refresh') : t('Refresh unavailable in preview')
+        }
       >
         <HugeiconsIcon icon={RefreshIcon} aria-hidden='true' />
       </Button>

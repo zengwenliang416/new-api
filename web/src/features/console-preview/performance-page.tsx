@@ -16,12 +16,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
+import { LoadingState } from '@/components/loading-state'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -30,69 +36,72 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber, formatTimestampToDate } from '@/lib/format'
+import { getServerErrorMessage } from '@/lib/server-error-message'
 
 import { PerformanceGroupCard } from './components/performance-group-card'
-import {
-  MonitoringTimeRange,
-  PreviewNotice,
-} from './components/preview-elements'
+import { MonitoringTimeRange } from './components/preview-elements'
+import { getPerformanceGroups, performanceStatus } from './performance-data'
 
 export function PerformancePage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const [range, setRange] = useState('24h')
   const [group, setGroup] = useState('all')
-  const groups = [
-    {
-      id: 'standard',
-      title: t('Standard models'),
-      description: t('General conversation and everyday tasks'),
-      models: ['example-chat-model', 'example-fast-model'],
-      category: 'text',
-    },
-    {
-      id: 'reasoning',
-      title: t('Reasoning models'),
-      description: t('Reasoning and complex problem solving'),
-      models: ['example-reasoning-model'],
-      category: 'text',
-    },
-    {
-      id: 'coding',
-      title: t('Coding models'),
-      description: t('Code generation and development assistance'),
-      models: ['example-coding-model'],
-      category: 'text',
-    },
-    {
-      id: 'image',
-      title: t('Image models'),
-      description: t('Image generation and visual tasks'),
-      models: ['example-image-model'],
-      category: 'image',
-    },
-  ]
+  const [referenceRate, setReferenceRate] = useState('90')
+  const hours = { '1h': 1, '24h': 24, '7d': 168 }[range] ?? 24
+  const lang = i18n.resolvedLanguage || i18n.language
+  const query = useQuery({
+    queryKey: ['perf-metrics-groups', hours, lang],
+    queryFn: ({ signal }) => getPerformanceGroups(hours, lang, signal),
+    staleTime: 55_000,
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+    meta: { errorToast: false },
+  })
+  const groups = query.data?.groups ?? []
   const visibleGroups = groups.filter(
-    (item) => group === 'all' || item.category === group
+    (item) => group === 'all' || `group:${item.group}` === group
   )
+  const referenceNumber = Number(referenceRate)
+  const validReference =
+    referenceRate.trim() !== '' &&
+    Number.isFinite(referenceNumber) &&
+    referenceNumber >= 0 &&
+    referenceNumber <= 99.9
+  const summaries = [
+    { status: 'operational', label: t('Operational'), color: 'bg-emerald-500' },
+    { status: 'degraded', label: t('Degraded'), color: 'bg-amber-500' },
+    { status: 'unavailable', label: t('Unavailable'), color: 'bg-rose-500' },
+    { status: 'nodata', label: t('No data'), color: 'bg-muted-foreground/50' },
+  ]
 
   return (
     <SectionPageLayout stackActionsOnMobile>
       <SectionPageLayout.Title>{t('Performance')}</SectionPageLayout.Title>
       <SectionPageLayout.Actions>
-        <MonitoringTimeRange value={range} onValueChange={setRange} />
+        <MonitoringTimeRange
+          value={range}
+          onValueChange={setRange}
+          onRefresh={() => void query.refetch()}
+          refreshing={query.isFetching}
+        />
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='space-y-5 pb-2'>
-          <div className='space-y-3'>
-            <div className='flex flex-wrap items-center justify-between gap-2 text-xs'>
-              <p className='text-muted-foreground'>
-                {t('Availability and latency across model groups.')}
-              </p>
-              <span className='text-muted-foreground'>
-                {t('Last updated')}: — · {t('Auto refresh paused')}
-              </span>
-            </div>
-            <PreviewNotice />
+          <div className='flex flex-wrap items-center justify-between gap-2 text-xs'>
+            <p className='text-muted-foreground'>
+              {t('Availability and latency across model groups.')}
+            </p>
+            <span className='text-muted-foreground' role='status'>
+              {t('Last updated')}:{' '}
+              {query.dataUpdatedAt > 0
+                ? formatTimestampToDate(query.dataUpdatedAt, 'milliseconds')
+                : '—'}{' '}
+              · {t('Auto refresh every 60 seconds')}
+              {query.isFetching && ` · ${t('Refreshing...')}`}
+            </span>
           </div>
           <div className='flex flex-wrap items-center justify-end gap-2'>
             <Select
@@ -102,8 +111,12 @@ export function PerformancePage() {
               }}
               items={{
                 all: t('All groups'),
-                text: t('Text models'),
-                image: t('Image models'),
+                ...Object.fromEntries(
+                  groups.map((item) => [
+                    `group:${item.group}`,
+                    item.name || item.group,
+                  ])
+                ),
               }}
             >
               <SelectTrigger
@@ -115,8 +128,11 @@ export function PerformancePage() {
               <SelectContent>
                 <SelectGroup>
                   <SelectItem value='all'>{t('All groups')}</SelectItem>
-                  <SelectItem value='text'>{t('Text models')}</SelectItem>
-                  <SelectItem value='image'>{t('Image models')}</SelectItem>
+                  {groups.map((item) => (
+                    <SelectItem key={item.group} value={`group:${item.group}`}>
+                      {item.name || item.group}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -135,61 +151,111 @@ export function PerformancePage() {
                   )}
                 </p>
                 <p className='text-muted-foreground'>
-                  {t('This preview has no cache statistics or pricing data.')}
+                  {t(
+                    'Missing observations are shown as —. Input multipliers require at least 90% cost coverage and exclude output and tool charges.'
+                  )}
+                </p>
+                <p className='text-muted-foreground'>
+                  {t(
+                    'The reference cache rate only changes this comparison. It does not change billing or model requests.'
+                  )}
                 </p>
               </div>
             </Dialog>
-            <span className='border px-3 py-1.5 text-xs'>
-              {t('Reference cache rate')}: —
-            </span>
+            <div className='flex items-center gap-2 text-xs'>
+              <Label htmlFor='performance-reference-rate' className='text-xs'>
+                {t('Reference cache rate')}
+              </Label>
+              <Input
+                id='performance-reference-rate'
+                type='number'
+                min={0}
+                max={99.9}
+                step={0.1}
+                value={referenceRate}
+                onChange={(event) => setReferenceRate(event.target.value)}
+                aria-invalid={!validReference}
+                aria-describedby={
+                  !validReference ? 'performance-reference-error' : undefined
+                }
+                className='w-20 rounded-sm'
+              />
+              <span>%</span>
+            </div>
           </div>
-          <div
-            className='flex flex-wrap items-center gap-x-5 gap-y-2 text-xs'
-            aria-label={t('Group status summary')}
-          >
-            <span className='inline-flex items-center gap-1.5'>
-              <span
-                className='size-1.5 rounded-full bg-emerald-500'
-                aria-hidden='true'
-              />
-              — {t('Operational')}
-            </span>
-            <span className='inline-flex items-center gap-1.5'>
-              <span
-                className='size-1.5 rounded-full bg-amber-500'
-                aria-hidden='true'
-              />
-              — {t('Degraded')}
-            </span>
-            <span className='inline-flex items-center gap-1.5'>
-              <span
-                className='size-1.5 rounded-full bg-rose-500'
-                aria-hidden='true'
-              />
-              — {t('Unavailable')}
-            </span>
-            <span className='text-muted-foreground inline-flex items-center gap-1.5'>
-              <span
-                className='bg-muted-foreground/50 size-1.5 rounded-full'
-                aria-hidden='true'
-              />
-              — {t('No data')}
-            </span>
-          </div>
-          <div
-            className='grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2'
-            aria-label={t('Performance group previews')}
-          >
-            {visibleGroups.map((item) => (
-              <PerformanceGroupCard
-                key={item.id}
-                title={item.title}
-                description={item.description}
-                models={item.models}
-                range={range}
-              />
-            ))}
-          </div>
+          {!validReference && (
+            <p
+              id='performance-reference-error'
+              className='text-destructive text-xs'
+            >
+              {t('Enter a reference cache rate from 0 to 99.9%.')}
+            </p>
+          )}
+          {query.isPending && <LoadingState />}
+          {query.isError && (
+            <ErrorState
+              title={t('Unable to load performance data')}
+              description={getServerErrorMessage(query.error)}
+              onRetry={() => void query.refetch()}
+            />
+          )}
+          {query.data && (
+            <>
+              <div
+                className='flex flex-wrap items-center gap-x-5 gap-y-2 text-xs'
+                aria-label={t('Group status summary')}
+              >
+                {summaries.map((summary) => (
+                  <span
+                    key={summary.status}
+                    className='inline-flex items-center gap-1.5'
+                  >
+                    <span
+                      className={`size-1.5 rounded-full ${summary.color}`}
+                      aria-hidden='true'
+                    />
+                    {formatNumber(
+                      visibleGroups.filter(
+                        (item) =>
+                          performanceStatus(
+                            item.request_count,
+                            item.success_rate
+                          ) === summary.status
+                      ).length,
+                      locale
+                    )}{' '}
+                    {summary.label}
+                  </span>
+                ))}
+              </div>
+              {visibleGroups.length === 0 ? (
+                <EmptyState
+                  title={t('No performance data')}
+                  description={t(
+                    'No requests were recorded for the selected groups and time range.'
+                  )}
+                />
+              ) : (
+                <div
+                  className='grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2'
+                  aria-label={t('Performance groups')}
+                  aria-busy={query.isPlaceholderData}
+                >
+                  {visibleGroups.map((item) => (
+                    <PerformanceGroupCard
+                      key={item.group}
+                      group={item}
+                      startTs={query.data.start_ts}
+                      endTs={query.data.end_ts}
+                      referenceRate={
+                        validReference ? referenceNumber : Number.NaN
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

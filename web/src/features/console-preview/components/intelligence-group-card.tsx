@@ -22,169 +22,201 @@ import {
   Image01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Dialog } from '@/components/dialog'
+import { EmptyState } from '@/components/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber, formatTimestamp } from '@/lib/format'
 
-import { ExampleTimeline } from './preview-elements'
+import {
+  probeQualityRate,
+  type ProbeSlot,
+  type ProbeTarget,
+} from '../intelligence-types'
+import { IntelligenceArtifact } from './intelligence-artifact'
+import { IntelligenceTimeline } from './intelligence-timeline'
 
 export function IntelligenceGroupCard(props: {
-  title: string
-  model: string
-  range: string
+  target: ProbeTarget
+  onOpenRun: (id: number) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  const [selectedDrawing, setSelectedDrawing] = useState<ProbeSlot | null>(null)
+  const target = props.target
+  const hasMath = target.kinds.includes('math')
+  const hasDrawing = target.kinds.includes('drawing')
+  const drawing = selectedDrawing ?? target.drawing.latest_pass
+  const rate = probeQualityRate(hasMath ? target.math : target.drawing)
+  let health = t('No data')
+  if (rate !== null) {
+    if (rate >= 90) health = t('Normal capability')
+    else if (rate >= 70) health = t('Occasional misses')
+    else health = t('Potential degradation')
+  }
+  const tests = [
+    {
+      kind: 'math',
+      label: t('Logic test'),
+      icon: CodeIcon,
+      stats: target.math,
+    },
+    {
+      kind: 'drawing',
+      label: t('Drawing test'),
+      icon: Image01Icon,
+      stats: target.drawing,
+    },
+  ] as const
 
   return (
     <Card
       className='min-w-0 gap-5 rounded-none shadow-none'
       role='article'
-      aria-label={props.title}
+      aria-label={`${target.group_name || target.group} · ${target.model}`}
     >
       <CardHeader>
         <div className='flex flex-wrap items-center justify-between gap-2'>
           <div className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1'>
             <CardTitle className='text-primary text-sm font-semibold'>
-              {props.title}
+              {target.group_name || target.group}
             </CardTitle>
-            <span className='font-mono text-xs break-all'>{props.model}</span>
-            <Badge variant='secondary' className='rounded-sm'>
-              {t('Example')}
-            </Badge>
+            <span className='font-mono text-xs break-all'>{target.model}</span>
+            {target.effort && (
+              <Badge variant='secondary' className='rounded-sm'>
+                {target.effort}
+              </Badge>
+            )}
           </div>
-          <Badge variant='outline' className='text-muted-foreground'>
-            {t('Not connected')}
-          </Badge>
+          <Badge variant='outline'>{health}</Badge>
         </div>
-        <p className='text-muted-foreground mt-1 text-xs'>
-          {t('Capability checks and model outputs will appear here.')}
-        </p>
+        {target.group_description && (
+          <p className='text-muted-foreground mt-1 text-xs'>
+            {target.group_description}
+          </p>
+        )}
       </CardHeader>
       <CardContent className='grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-5'>
-        <div className='min-w-0 space-y-6 lg:col-span-3'>
-          {[
-            { label: t('Logic test'), icon: CodeIcon },
-            { label: t('Drawing test'), icon: Image01Icon },
-          ].map((test) => (
-            <section
-              key={test.label}
-              className='min-w-0 space-y-3'
-              aria-label={test.label}
-            >
-              <div className='flex flex-wrap items-center justify-between gap-2'>
-                <h4 className='flex items-center gap-2 text-xs font-medium'>
-                  <HugeiconsIcon
-                    icon={test.icon}
-                    className='size-4'
-                    aria-hidden='true'
+        <div
+          className={
+            hasDrawing
+              ? 'min-w-0 space-y-6 lg:col-span-3'
+              : 'min-w-0 space-y-6 lg:col-span-5'
+          }
+        >
+          {tests
+            .filter((test) => target.kinds.includes(test.kind))
+            .map((test) => {
+              const passRate = probeQualityRate(test.stats)
+              const latest = test.stats.latest
+              return (
+                <section
+                  key={test.kind}
+                  className='min-w-0 space-y-3'
+                  aria-label={test.label}
+                >
+                  <div className='flex flex-wrap items-center justify-between gap-2'>
+                    <h4 className='flex items-center gap-2 text-xs font-medium'>
+                      <HugeiconsIcon
+                        icon={test.icon}
+                        className='size-4'
+                        aria-hidden='true'
+                      />
+                      {test.label}
+                    </h4>
+                    <span className='text-muted-foreground text-[11px]'>
+                      {t('Last check')}:{' '}
+                      {latest
+                        ? formatTimestamp(latest.started_at || latest.ts)
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className='flex flex-wrap items-baseline gap-x-3 gap-y-1'>
+                    <strong className='font-mono text-2xl font-semibold'>
+                      {passRate === null ? '—' : formatNumber(passRate, locale)}
+                      <span className='text-muted-foreground ml-1 text-sm'>
+                        %
+                      </span>
+                    </strong>
+                    <span className='text-muted-foreground text-xs'>
+                      {t('Passed')}: {formatNumber(test.stats.pass, locale)} ·{' '}
+                      {t('Failed')}: {formatNumber(test.stats.fail, locale)}
+                    </span>
+                    <span className='text-xs text-amber-700 dark:text-amber-400'>
+                      {t('Request failed')}:{' '}
+                      {formatNumber(test.stats.error, locale)}
+                    </span>
+                    <span className='text-muted-foreground text-xs'>
+                      {t('Average duration')}:{' '}
+                      {test.stats.total > 0
+                        ? `${formatNumber(test.stats.avg_latency_ms / 1000, locale)} s`
+                        : '—'}
+                    </span>
+                  </div>
+                  <IntelligenceTimeline
+                    slots={test.stats.slots}
+                    label={`${target.model} ${test.label}`}
+                    selectedRunId={
+                      test.kind === 'drawing' ? drawing?.run_id : undefined
+                    }
+                    onSelect={(slot) => {
+                      if (
+                        test.kind === 'drawing' &&
+                        slot.status === 'pass' &&
+                        slot.has_artifact
+                      ) {
+                        setSelectedDrawing(slot)
+                      } else if (slot.run_id) props.onOpenRun(slot.run_id)
+                    }}
                   />
-                  {test.label}
-                </h4>
-                <span className='text-muted-foreground text-[11px]'>
-                  {t('Last check')}: —
-                </span>
-              </div>
-              <div className='flex flex-wrap items-baseline gap-x-3 gap-y-1'>
-                <strong className='font-mono text-2xl font-semibold'>
-                  —<span className='text-muted-foreground ml-1 text-sm'>%</span>
-                </strong>
-                <span className='text-muted-foreground text-xs'>
-                  {t('Completed checks')}: —
-                </span>
-                <span className='text-muted-foreground text-xs'>
-                  {t('Average duration')}: —
-                </span>
-              </div>
-              <ExampleTimeline compact range={props.range} />
-            </section>
-          ))}
+                </section>
+              )
+            })}
         </div>
-        <div className='min-w-0 space-y-2 lg:col-span-2'>
-          <div className='text-muted-foreground flex flex-wrap justify-between gap-1 text-[11px]'>
-            <span>{t('Latest drawing')}</span>
-            <span>{t('Example')}</span>
-          </div>
-          <div className='bg-muted/35 flex min-h-48 items-center justify-center border lg:min-h-52'>
-            <svg
-              viewBox='0 0 320 180'
-              className='text-muted-foreground/40 h-auto w-full max-w-72'
-              role='img'
-              aria-label={t('Sample drawing preview')}
-            >
-              <path
-                d='M25 145 Q60 138 95 145 T165 145 T235 145 T300 145 M40 157 Q75 150 110 157 T180 157 T250 157'
-                fill='none'
-                stroke='currentColor'
-                strokeWidth='1.5'
-              />
-              <path
-                d='M127 129 H217 L201 141 H143 Z M170 40 V126 M165 53 L129 118 H165 Z M177 64 L206 118 H177 Z'
-                fill='none'
-                stroke='currentColor'
-                strokeWidth='2'
-                strokeLinejoin='round'
-              />
-              <circle
-                cx='249'
-                cy='44'
-                r='12'
-                fill='none'
-                stroke='currentColor'
-                strokeWidth='1.5'
-              />
-              <path
-                d='M48 94 Q66 78 84 94 M42 109 Q66 90 90 109 M66 93 V140'
-                fill='none'
-                stroke='currentColor'
-                strokeWidth='1.5'
-              />
-            </svg>
-          </div>
-          <Dialog
-            title={t('Example check details')}
-            description={t(
-              'This is a layout preview, not a completed model evaluation.'
-            )}
-            trigger={
+        {hasDrawing && (
+          <div className='min-w-0 space-y-2 lg:col-span-2'>
+            <div className='text-muted-foreground flex flex-wrap justify-between gap-1 text-[11px]'>
+              <span>{t('Latest drawing')}</span>
+              {drawing && (
+                <span>{formatTimestamp(drawing.started_at || drawing.ts)}</span>
+              )}
+            </div>
+            <div className='bg-muted/35 min-h-48 overflow-hidden border lg:min-h-52'>
+              {drawing?.run_id ? (
+                <IntelligenceArtifact runId={drawing.run_id} />
+              ) : (
+                <EmptyState
+                  title={t('No drawing available')}
+                  description={t(
+                    'A successful drawing check will appear here.'
+                  )}
+                  className='min-h-48'
+                />
+              )}
+            </div>
+            {drawing?.run_id && (
               <Button
                 variant='ghost'
                 size='sm'
                 className='h-auto w-full justify-between py-1.5 text-xs whitespace-normal'
+                onClick={() => {
+                  if (drawing.run_id) props.onOpenRun(drawing.run_id)
+                }}
               >
-                {t('View sample check')}
+                {t('View check details')}
                 <HugeiconsIcon
                   icon={ArrowRight01Icon}
                   data-icon='inline-end'
                   aria-hidden='true'
                 />
               </Button>
-            }
-          >
-            <Tabs defaultValue='question'>
-              <TabsList aria-label={t('Check details')}>
-                <TabsTrigger value='question'>{t('Test question')}</TabsTrigger>
-                <TabsTrigger value='response'>
-                  {t('Model response')}
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value='question'>
-                <div className='bg-muted/40 mt-2 space-y-3 rounded-md p-4'>
-                  <Badge variant='secondary'>{t('Example')}</Badge>
-                  <p>{t('Draw a small sailboat on a calm lake using SVG.')}</p>
-                </div>
-              </TabsContent>
-              <TabsContent value='response'>
-                <p className='text-muted-foreground bg-muted/40 mt-2 rounded-md p-4'>
-                  {t('No model response. Evaluation is not connected.')}
-                </p>
-              </TabsContent>
-            </Tabs>
-          </Dialog>
-        </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

@@ -127,20 +127,21 @@ describe('security sidebar visibility', () => {
 })
 
 describe('preview navigation', () => {
-  it('shows the five preview destinations beside the existing tools', () => {
+  it('keeps preview badges only on destinations that are not connected to live data', () => {
     const { result } = sidebarFor()
     const previews = result.current
       .flatMap((group) => group.items)
       .filter((item) => item.badge === 'Preview')
     expect(
       previews.map((item) => ('url' in item ? item.url : undefined))
-    ).toEqual([
-      '/workspace',
-      '/image',
-      '/performance',
-      '/intelligence',
-      '/invitation',
-    ])
+    ).toEqual(['/workspace', '/image', '/invitation'])
+    for (const url of ['/performance', '/intelligence']) {
+      const livePage = result.current
+        .flatMap((group) => group.items)
+        .find((item) => 'url' in item && item.url === url)
+      expect(livePage).toBeDefined()
+      expect(livePage?.badge).toBeUndefined()
+    }
   })
 
   it('keeps preview navigation within the corresponding existing module settings', () => {

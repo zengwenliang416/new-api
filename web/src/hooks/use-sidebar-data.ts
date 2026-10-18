@@ -109,14 +109,12 @@ export function useSidebarData(): SidebarData {
             url: '/performance',
             configUrls: ['/dashboard/models'],
             icon: Gauge,
-            badge: t('Preview'),
           },
           {
             title: t('Intelligence monitoring'),
             url: '/intelligence',
             configUrls: ['/dashboard/models'],
             icon: BrainCircuit,
-            badge: t('Preview'),
           },
           {
             title: t('API Keys'),
