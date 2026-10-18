@@ -42,6 +42,8 @@ type EndpointsSheetProps = {
   onSearch: (event: React.FormEvent<HTMLFormElement>) => void
   open: boolean
   query: string
+  searchInputRef?: React.RefObject<HTMLInputElement | null>
+  triggerRef?: React.RefObject<HTMLButtonElement | null>
 }
 
 export function EndpointsSheet(props: EndpointsSheetProps) {
@@ -49,7 +51,12 @@ export function EndpointsSheet(props: EndpointsSheetProps) {
 
   return (
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-      <SheetContent side='left' className='w-[min(24rem,92vw)] sm:max-w-md'>
+      <SheetContent
+        side='left'
+        className='w-[min(24rem,92vw)] sm:max-w-md'
+        initialFocus={props.searchInputRef}
+        finalFocus={props.triggerRef}
+      >
         <SheetHeader>
           <SheetTitle>{t('Endpoints')}</SheetTitle>
           <SheetDescription>
@@ -58,6 +65,7 @@ export function EndpointsSheet(props: EndpointsSheetProps) {
         </SheetHeader>
         <div className='px-4'>
           <DocsSearchForm
+            searchInputRef={props.searchInputRef}
             query={props.query}
             activeQuery={props.activeQuery}
             onSearch={props.onSearch}

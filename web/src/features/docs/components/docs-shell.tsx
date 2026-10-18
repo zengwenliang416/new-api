@@ -32,6 +32,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 
+import { DocsAssistantPreview } from './docs-assistant-preview'
 import { DocsSidebar } from './docs-sidebar'
 
 type DocsShellProps = {
@@ -85,6 +86,7 @@ export function DocsShell(props: DocsShellProps) {
             </ScrollArea>
           </SheetContent>
         </Sheet>
+        <DocsAssistantPreview />
       </div>
     </PublicLayout>
   )

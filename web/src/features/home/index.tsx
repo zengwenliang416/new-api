@@ -132,7 +132,7 @@ export function Home() {
 
   if (loading) {
     return (
-      <PublicLayout>
+      <PublicLayout surface='home'>
         <div role='status' aria-live='polite'>
           <LoadingState />
         </div>
@@ -142,7 +142,7 @@ export function Home() {
 
   if (statusQuery.isError && !content) {
     return (
-      <PublicLayout>
+      <PublicLayout surface='home'>
         <ErrorState onRetry={() => void statusQuery.refetch()} />
       </PublicLayout>
     )
@@ -151,7 +151,7 @@ export function Home() {
   if (content) {
     if (isUrl) {
       return (
-        <PublicLayout showMainContainer={false}>
+        <PublicLayout surface='home' showMainContainer={false}>
           {/*
             allow-top-navigation-by-user-activation: the custom home page URL is
             admin-configured (trusted); this lets its target="_top" nav/menu links
@@ -178,7 +178,7 @@ export function Home() {
 
     if (contentIsHtml) {
       return (
-        <PublicLayout showMainContainer={false}>
+        <PublicLayout surface='home' showMainContainer={false}>
           <RichContent
             mode='html'
             htmlVariant='isolated'
@@ -190,7 +190,7 @@ export function Home() {
     }
 
     return (
-      <PublicLayout>
+      <PublicLayout surface='home'>
         <div className='mx-auto max-w-6xl px-4 py-8'>
           <RichContent
             mode='markdown'
@@ -203,7 +203,7 @@ export function Home() {
   }
 
   return (
-    <PublicLayout showMainContainer={false}>
+    <PublicLayout surface='home' showMainContainer={false}>
       <main data-home-page='true' className='relative overflow-x-clip'>
         <div className='bg-background relative z-10'>
           <HeroSection

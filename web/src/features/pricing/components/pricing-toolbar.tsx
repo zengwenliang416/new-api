@@ -43,15 +43,20 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { getSortLabels, type SortOption, type ViewMode } from '../constants'
 import type { PricingModel, PricingVendor, TokenUnit } from '../types'
 import { PricingSidebar } from './pricing-sidebar'
+import { SearchBar } from './search-bar'
 
 export interface PricingToolbarProps {
   filteredCount: number
   totalCount?: number
+  searchInput: string
+  onSearchChange: (value: string) => void
+  onSearchClear: () => void
   sortBy: string
   onSortChange: (value: string) => void
   tokenUnit: TokenUnit
@@ -86,37 +91,48 @@ export function PricingToolbar(props: PricingToolbarProps) {
   const sortLabels = getSortLabels(t)
 
   return (
-    <div className='bg-card rounded-xl border p-3'>
+    <div className='bg-card border p-3'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
-        <div className='flex items-center gap-2'>
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            onClick={() => setMobileFiltersOpen(true)}
-            className='gap-1.5 xl:hidden'
-          >
-            <Filter className='size-4' />
-            {t('Filter')}
-            {props.activeFilterCount > 0 && (
-              <Badge className='ml-0.5 size-5 justify-center p-0 text-[10px]'>
-                {props.activeFilterCount}
-              </Badge>
-            )}
-          </Button>
-
-          <div className='text-muted-foreground flex items-baseline gap-1 text-sm'>
-            <span className='text-foreground font-semibold tabular-nums'>
-              {props.filteredCount.toLocaleString()}
-            </span>
-            <span>{props.filteredCount === 1 ? t('model') : t('models')}</span>
-            {props.totalCount != null &&
-              props.filteredCount !== props.totalCount && (
-                <span className='text-muted-foreground/60 text-xs'>
-                  / {props.totalCount.toLocaleString()}
-                </span>
+        <div className='flex min-w-0 flex-1 basis-full flex-wrap items-center gap-3 sm:basis-80'>
+          <div className='flex shrink-0 items-center gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={() => setMobileFiltersOpen(true)}
+              className='gap-1.5 xl:hidden'
+            >
+              <Filter className='size-4' />
+              {t('Filter')}
+              {props.activeFilterCount > 0 && (
+                <Badge className='ml-0.5 size-5 justify-center p-0 text-[10px]'>
+                  {props.activeFilterCount}
+                </Badge>
               )}
+            </Button>
+
+            <div className='text-muted-foreground flex items-baseline gap-1 text-sm'>
+              <span className='text-foreground font-semibold tabular-nums'>
+                {formatNumber(props.filteredCount)}
+              </span>
+              <span>
+                {props.filteredCount === 1 ? t('model') : t('models')}
+              </span>
+              {props.totalCount != null &&
+                props.filteredCount !== props.totalCount && (
+                  <span className='text-muted-foreground/60 text-xs'>
+                    / {formatNumber(props.totalCount)}
+                  </span>
+                )}
+            </div>
           </div>
+          <SearchBar
+            value={props.searchInput}
+            onChange={props.onSearchChange}
+            onClear={props.onSearchClear}
+            placeholder={t('Search models...')}
+            className='flex-1 basis-40 sm:max-w-80'
+          />
         </div>
 
         <div className='flex min-w-0 flex-wrap items-center gap-2'>

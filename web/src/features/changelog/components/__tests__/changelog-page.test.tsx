@@ -40,6 +40,11 @@ describe('changelog page', () => {
   it('lists months newest first with anchors, a single latest badge, and every update', () => {
     render(<ChangelogPage />)
 
+    expect(screen.getByRole('note')).toHaveTextContent('Sample release notes')
+    expect(screen.getByRole('note')).toHaveTextContent(
+      "These entries preview the page layout and are not this site's release history."
+    )
+
     const months = screen
       .getAllByRole('heading', { level: 2 })
       .map((heading) => heading.textContent)

@@ -110,7 +110,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   if (dynamicSummary) {
     if (dynamicSummary.isSpecialExpression) {
       priceSummary = (
-        <div className='col-span-full min-w-0'>
+        <div className='min-w-0 basis-full'>
           <span className='text-warning'>
             {t('Special billing expression')}
           </span>
@@ -145,8 +145,8 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                 <div
                   key={entry.key}
                   className={cn(
-                    'flex min-w-0 flex-col gap-1',
-                    dynamicSummary.isTaskUsage && 'col-span-full'
+                    'flex min-w-0 flex-wrap items-baseline gap-x-1',
+                    dynamicSummary.isTaskUsage && 'basis-full'
                   )}
                 >
                   {label && (
@@ -154,7 +154,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                       {label}
                     </span>
                   )}
-                  <span className='flex flex-wrap items-baseline gap-x-1 font-mono text-sm font-semibold tabular-nums'>
+                  <span className='flex flex-wrap items-baseline gap-x-0.5 font-mono text-xs font-semibold tabular-nums'>
                     <span>{entry.formattedRange ?? entry.formatted}</span>
                     <span className='text-muted-foreground text-xs font-normal whitespace-nowrap'>
                       {' '}
@@ -165,17 +165,17 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               )
             })}
           {dynamicSummary.isTimePricing && (
-            <span className='text-muted-foreground col-span-full text-xs'>
+            <span className='text-muted-foreground basis-full text-xs'>
               {t('Current period price')}
             </span>
           )}
           {dynamicSummary.isMixedBilling && (
-            <span className='text-muted-foreground col-span-full text-xs'>
+            <span className='text-muted-foreground basis-full text-xs'>
               {t('Token or per-call pricing')}
             </span>
           )}
           {cardExamplePrice && (
-            <span className='text-muted-foreground col-span-full text-xs break-words'>
+            <span className='text-muted-foreground basis-full text-xs break-words'>
               {cardExamplePrice.label} ≈ {cardExamplePrice.formatted}
             </span>
           )}
@@ -184,7 +184,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             !dynamicSummary.primaryEntries.some(
               (entry) => entry.formattedRange
             ) && (
-              <span className='text-muted-foreground col-span-full text-xs break-words'>
+              <span className='text-muted-foreground basis-full text-xs break-words'>
                 ({dynamicSummary.tier.label})
               </span>
             )}
@@ -192,7 +192,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       )
     } else {
       priceSummary = (
-        <span className='text-muted-foreground col-span-full'>
+        <span className='text-muted-foreground basis-full'>
           {dynamicSummary.hasUnconfiguredProviders
             ? t('Usage-based billing · price not configured')
             : t('Dynamic Pricing')}
@@ -201,7 +201,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     }
   } else if (isUnconfiguredTaskUsage) {
     priceSummary = (
-      <span className='text-muted-foreground col-span-full'>
+      <span className='text-muted-foreground basis-full'>
         {t('Usage-based billing · price not configured')}
       </span>
     )
@@ -214,9 +214,12 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         : []),
     ]
     priceSummary = prices.map((price) => (
-      <div key={price.type} className='flex min-w-0 flex-col gap-1'>
+      <div
+        key={price.type}
+        className='flex min-w-0 flex-wrap items-baseline gap-x-1'
+      >
         <span className='text-muted-foreground text-xs'>{price.label}</span>
-        <span className='font-mono text-sm font-semibold tabular-nums'>
+        <span className='font-mono text-xs font-semibold tabular-nums'>
           {formatPrice(
             props.model,
             price.type,
@@ -235,8 +238,8 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     ))
   } else {
     priceSummary = (
-      <div className='col-span-full flex min-w-0 flex-col gap-1'>
-        <span className='font-mono text-sm font-semibold tabular-nums'>
+      <div className='flex min-w-0 basis-full flex-wrap items-baseline gap-x-1'>
+        <span className='font-mono text-xs font-semibold tabular-nums'>
           {formatRequestPrice(
             props.model,
             showRechargePrice,
@@ -254,11 +257,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   }
 
   return (
-    <Card className='hover:ring-foreground/20 h-full min-w-0 gap-3 transition-colors'>
-      <CardHeader className='flex flex-row items-start gap-3'>
+    <Card className='hover:border-foreground/20 h-full min-w-0 gap-4 rounded-none border py-5 ring-0 transition-colors'>
+      <CardHeader className='grid grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-5'>
         <div
           aria-hidden
-          className='bg-muted/50 flex size-10 shrink-0 items-center justify-center rounded-lg'
+          className='bg-muted/30 row-span-2 flex size-8 items-center justify-center'
         >
           {modelIcon || (
             <span className='text-muted-foreground text-sm font-bold'>
@@ -266,34 +269,53 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             </span>
           )}
         </div>
-        <div className='min-w-0 flex-1'>
-          <h3
-            className='line-clamp-2 font-mono text-[15px] leading-snug font-semibold [overflow-wrap:anywhere]'
-            title={props.model.model_name}
+        <h3
+          className='min-w-0 truncate font-mono text-[15px] leading-snug font-semibold'
+          title={props.model.model_name}
+        >
+          {props.model.model_name}
+        </h3>
+        <div className='col-start-3 row-start-1 flex items-center gap-1'>
+          <Button
+            variant='outline'
+            size='sm'
+            className='h-7 gap-1 rounded-none px-2 text-xs'
+            onClick={() => props.onClick(props.model.model_name || '')}
           >
-            {props.model.model_name}
-          </h3>
-          {props.model.vendor_name && (
-            <p
-              className='text-muted-foreground mt-1 truncate text-xs'
-              title={props.model.vendor_name}
-            >
-              {props.model.vendor_name}
-            </p>
-          )}
+            {t('Details')}
+            <ChevronRight aria-hidden className='size-3.5' />
+          </Button>
+          <CopyButton
+            value={props.model.model_name}
+            tooltip={t('Copy model name')}
+            variant='outline'
+            className='size-7 rounded-none'
+            iconClassName='size-3.5'
+          />
         </div>
-        <CopyButton
-          value={props.model.model_name}
-          tooltip={t('Copy model name')}
-          className='size-7'
-          iconClassName='size-3.5'
-        />
+        <div
+          role='group'
+          aria-label={t('Pricing')}
+          className='col-span-2 col-start-2 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-xs'
+        >
+          {priceSummary}
+        </div>
       </CardHeader>
-      <CardContent className='flex flex-1 flex-col gap-3'>
-        <div className='flex min-w-0 flex-col gap-1.5'>
-          <p className='text-muted-foreground line-clamp-2 text-[13px] leading-5 break-words'>
-            {props.model.description || t('No description available.')}
-          </p>
+      <CardContent className='flex flex-1 flex-col gap-3 px-5'>
+        <p className='text-muted-foreground line-clamp-4 text-[13px] leading-5 break-words'>
+          {props.model.description || t('No description available.')}
+        </p>
+        <div className='mt-auto flex min-w-0 flex-col gap-1.5'>
+          <ModelBillingModeBadge model={props.model} appearance='caption' />
+          {dynamicSummary?.providerCount && (
+            <span className='text-muted-foreground text-xs break-words'>
+              {t('{{count}} providers', {
+                count: dynamicSummary.providerCount,
+              })}
+              {dynamicSummary.hasUnconfiguredProviders &&
+                ` · ${t('Not configured for some providers')}`}
+            </span>
+          )}
           {tags.length > 0 && (
             <div
               role='group'
@@ -311,25 +333,14 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               )}
             </div>
           )}
-        </div>
-        <div
-          role='group'
-          aria-label={t('Pricing')}
-          className='mt-auto flex min-w-0 flex-col gap-1.5'
-        >
-          <ModelBillingModeBadge model={props.model} appearance='caption' />
-          {dynamicSummary?.providerCount && (
-            <span className='text-muted-foreground text-xs break-words'>
-              {t('{{count}} providers', {
-                count: dynamicSummary.providerCount,
-              })}
-              {dynamicSummary.hasUnconfiguredProviders &&
-                ` · ${t('Not configured for some providers')}`}
-            </span>
+          {props.model.vendor_name && (
+            <p
+              className='text-muted-foreground truncate text-xs'
+              title={props.model.vendor_name}
+            >
+              {props.model.vendor_name}
+            </p>
           )}
-          <div className='grid grid-cols-[repeat(auto-fit,minmax(88px,1fr))] gap-x-3 gap-y-2'>
-            {priceSummary}
-          </div>
         </div>
         {(groups.length > 0 || endpoints.length > 0) && (
           <dl
@@ -381,20 +392,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           </dl>
         )}
       </CardContent>
-      <CardFooter className='mt-auto border-0 bg-transparent pt-0'>
+      <CardFooter className='mt-auto rounded-none border-0 bg-transparent px-5 pt-0 pb-5'>
         <ModelPerfBadge
           perf={props.perf}
           className='border-border/60 border-t pt-2'
-        >
-          <Button
-            variant='ghost'
-            size='sm'
-            onClick={() => props.onClick(props.model.model_name || '')}
-          >
-            {t('Details')}
-            <ChevronRight aria-hidden className='size-3.5' />
-          </Button>
-        </ModelPerfBadge>
+        />
       </CardFooter>
     </Card>
   )

@@ -145,7 +145,10 @@ export function RechargeFormCard({
 
   if (loading) {
     return (
-      <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
+      <Card
+        data-card-hover='false'
+        className='gap-0 overflow-hidden rounded-none border py-0 shadow-none ring-0'
+      >
         <CardHeader className='border-b p-3 !pb-3 sm:p-5 sm:!pb-5'>
           <Skeleton className='h-6 w-32' />
           <Skeleton className='mt-2 h-4 w-48' />
@@ -158,7 +161,7 @@ export function RechargeFormCard({
               <div className='grid grid-cols-2 gap-3 sm:grid-cols-4'>
                 {Array.from({ length: 8 }, (_, index) => `preset-${index}`).map(
                   (key) => (
-                    <Skeleton key={key} className='h-[72px] rounded-lg' />
+                    <Skeleton key={key} className='h-24 rounded-none' />
                   )
                 )}
               </div>
@@ -199,7 +202,10 @@ export function RechargeFormCard({
       title={t('Add Funds')}
       description={t('Choose an amount and payment method')}
       icon={<WalletCards className='h-4 w-4' />}
-      iconTone='success'
+      iconTone='neutral'
+      iconClassName='rounded-none'
+      className='min-w-0 rounded-none border shadow-none ring-0'
+      headerClassName='rounded-none'
       disableHoverEffect
       action={
         onOpenBilling ? (
@@ -207,7 +213,7 @@ export function RechargeFormCard({
             variant='outline'
             size='sm'
             onClick={onOpenBilling}
-            className='w-full gap-2 sm:w-auto'
+            className='w-full gap-2 rounded-none shadow-none sm:w-auto'
           >
             <Receipt className='h-4 w-4' />
             {t('Order History')}
@@ -248,15 +254,16 @@ export function RechargeFormCard({
                           key={preset.value}
                           variant='outline'
                           className={cn(
-                            'flex min-h-16 flex-col items-start rounded-lg px-3 py-2.5 text-left whitespace-normal sm:min-h-[72px] sm:p-4',
+                            'flex min-h-20 min-w-0 flex-col items-start justify-between gap-3 rounded-none px-3 py-3 text-left whitespace-normal shadow-none sm:min-h-24 sm:p-4',
                             selectedPreset === preset.value
                               ? 'border-foreground bg-foreground/5 dark:border-foreground dark:bg-foreground/10'
-                              : 'border-muted'
+                              : 'border-border/70'
                           )}
+                          aria-pressed={selectedPreset === preset.value}
                           onClick={() => onSelectPreset(preset)}
                         >
-                          <div className='flex w-full items-center justify-between'>
-                            <div className='text-base font-semibold sm:text-lg'>
+                          <div className='flex w-full min-w-0 flex-wrap items-center justify-between gap-2'>
+                            <div className='text-base font-semibold break-all sm:text-lg'>
                               {formatNumber(displayValue)}
                             </div>
                             {hasDiscount && (
@@ -265,7 +272,7 @@ export function RechargeFormCard({
                               </div>
                             )}
                           </div>
-                          <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
+                          <div className='text-muted-foreground w-full text-xs break-words'>
                             {hasDiscount && savedAmount > 0 ? (
                               <Trans
                                 t={t}
@@ -298,7 +305,7 @@ export function RechargeFormCard({
                 >
                   {t('Custom Amount')}
                 </Label>
-                <div className='grid grid-cols-[minmax(0,1fr)_minmax(110px,0.55fr)] gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center'>
+                <div className='grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'>
                   <Input
                     id='topup-amount'
                     type='number'
@@ -306,16 +313,16 @@ export function RechargeFormCard({
                     onChange={(e) => handleAmountChange(e.target.value)}
                     min={minTopup}
                     placeholder={t('Minimum {{amount}}', { amount: minTopup })}
-                    className='h-9 text-base sm:h-10 sm:text-lg'
+                    className='h-9 min-w-0 rounded-none text-base shadow-none sm:h-10 sm:text-lg'
                   />
-                  <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
-                    <span className='text-muted-foreground truncate text-xs'>
+                  <div className='bg-muted/20 flex min-h-9 min-w-0 flex-wrap items-center justify-between gap-2 border px-3 py-2 sm:min-w-52'>
+                    <span className='text-muted-foreground text-xs'>
                       {t('Amount to pay:')}
                     </span>
                     {calculating ? (
                       <Skeleton className='h-5 w-16' />
                     ) : (
-                      <span className='text-sm font-semibold'>
+                      <span className='text-sm font-semibold break-all'>
                         {formatCurrency(paymentAmount)}
                       </span>
                     )}
@@ -356,7 +363,7 @@ export function RechargeFormCard({
                               ? `${method.name}. ${disabledReason}`
                               : method.name
                           }
-                          className='min-h-14 min-w-0 justify-start gap-2 rounded-lg px-3 py-2 text-left'
+                          className='min-h-14 min-w-0 justify-start gap-2 rounded-none px-3 py-2 text-left shadow-none'
                         >
                           {paymentLoading === method.type ? (
                             <Loader2 className='h-4 w-4 animate-spin' />
@@ -454,7 +461,7 @@ export function RechargeFormCard({
                                 ? `${method.name}. ${disabledReason}`
                                 : method.name
                             }
-                            className='min-h-14 min-w-0 justify-start gap-2 rounded-lg px-3 py-2 text-left'
+                            className='min-h-14 min-w-0 justify-start gap-2 rounded-none px-3 py-2 text-left shadow-none'
                           >
                             {methodIcon}
                             <span className='flex min-w-0 flex-col items-start gap-0.5'>
@@ -533,13 +540,13 @@ export function RechargeFormCard({
               value={redemptionCode}
               onChange={(e) => onRedemptionCodeChange(e.target.value)}
               placeholder={t('Enter your redemption code')}
-              className='h-9 min-w-0'
+              className='h-9 min-w-0 rounded-none shadow-none'
             />
             <Button
               onClick={onRedeem}
               disabled={redeeming}
               variant='outline'
-              className='h-9 px-4'
+              className='h-9 rounded-none px-4 shadow-none'
             >
               {redeeming && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
               {t('Redeem')}

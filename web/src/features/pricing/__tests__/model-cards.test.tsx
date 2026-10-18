@@ -148,12 +148,51 @@ describe('model cards', () => {
       <ModelCard model={pricingModel({ model_name: name })} onClick={onClick} />
     )
     expect(screen.getByRole('heading', { name })).toHaveAttribute('title', name)
+    const header = screen
+      .getByRole('heading', { name })
+      .closest('[data-slot="card-header"]')
+    expect(header).not.toBeNull()
+    expect(
+      within(header as HTMLElement).getByRole('button', { name: 'Details' })
+    ).toBeVisible()
+    expect(
+      within(header as HTMLElement).getByRole('button', {
+        name: 'Copy model name',
+      })
+    ).toBeVisible()
+    expect(screen.getByRole('heading', { name })).toHaveClass('truncate')
     await user.click(screen.getByRole('button', { name: 'Copy model name' }))
     expect(await navigator.clipboard.readText()).toBe(name)
     expect(onClick).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Details' }))
     expect(onClick).toHaveBeenCalledOnce()
     expect(onClick).toHaveBeenCalledWith(name)
+  })
+
+  it('places the price summary with the model name before descriptive metadata', () => {
+    render(
+      <ModelCard
+        model={pricingModel({
+          description: 'A model description from the catalog.',
+        })}
+        onClick={vi.fn()}
+      />
+    )
+    const header = screen
+      .getByRole('heading', { name: 'example-model' })
+      .closest('[data-slot="card-header"]')
+    expect(header).not.toBeNull()
+    expect(
+      within(header as HTMLElement).getByRole('group', { name: 'Pricing' })
+    ).toBeVisible()
+    expect(
+      within(header as HTMLElement).queryByText(
+        'A model description from the catalog.'
+      )
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText('A model description from the catalog.')
+    ).toBeVisible()
   })
 
   it('retains a neutral health strip and missing values when metrics are unavailable', () => {
@@ -181,6 +220,23 @@ describe('model cards', () => {
     })
     expect(statusStrip).toHaveClass('gap-px')
     expect(statusStrip).not.toHaveClass('justify-between')
+  })
+
+  it('wraps performance measurements without dropping metrics on a narrow card', () => {
+    render(
+      <ModelCard
+        model={pricingModel()}
+        onClick={vi.fn()}
+        perf={{ avg_latency_ms: 123456, avg_tps: 12345, success_rate: 99.8 }}
+      />
+    )
+    const metrics = screen.getByLabelText(
+      'Performance metrics for the last 24 hours'
+    )
+    const measurements = within(metrics).getByText('99.80%').closest('dl')
+    expect(measurements).toHaveClass('flex-wrap')
+    expect(within(metrics).getByTitle('Average latency')).toBeVisible()
+    expect(within(metrics).getByTitle('Throughput')).toBeVisible()
   })
 
   it('keeps group, endpoint and tag overflow counts with their own metadata', () => {
@@ -224,11 +280,7 @@ describe('model cards', () => {
       within(tagField).getByText('video-generation, high-resolution')
     ).toHaveAttribute('title', tags.join(', '))
     expect(within(tagField).getByText('+4')).toBeVisible()
-    expect(
-      within(screen.getByRole('group', { name: 'Pricing' })).getByText(
-        'Token-based'
-      )
-    ).toBeVisible()
+    expect(screen.getByText('Token-based')).toBeVisible()
   })
 
   it('omits metadata fields when the model has no groups, endpoints or tags', () => {
@@ -483,7 +535,8 @@ describe('model cards', () => {
     )
     const grid = screen
       .getByRole('heading', { name: 'example-model' })
-      .closest('.grid')
+      .closest('[data-slot="card"]')?.parentElement
+    expect(grid).toHaveClass('grid-cols-1', 'md:grid-cols-2')
     expect(grid).toHaveClass('xl:grid-cols-3')
     expect(grid).not.toHaveClass('2xl:grid-cols-3')
     expect(grid).not.toHaveClass('min-[1440px]:grid-cols-3')

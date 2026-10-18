@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button'
 import { DOCS_GUIDES } from '../data/guides'
 import { buildGuideContent } from '../lib/build-guide-content'
 import { useDocTemplate } from '../lib/use-doc-template'
+import { DocsCredentialPreview } from './docs-credential-preview'
 import { DocsMarkdown } from './docs-markdown'
 
 export function DocsGuidePage(props: { slug: string }) {
@@ -87,6 +88,7 @@ ${applyTemplate(content, { maskKey: true })}`
           </CopyButton>
         </div>
       </header>
+      <DocsCredentialPreview />
       {showLanguageHint && (
         <p className='text-muted-foreground text-sm' role='note'>
           {t(

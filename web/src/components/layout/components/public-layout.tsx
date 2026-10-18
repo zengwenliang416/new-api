@@ -23,6 +23,7 @@ import { PublicHeader, type PublicHeaderProps } from './public-header'
 
 type PublicLayoutProps = {
   children: React.ReactNode
+  surface?: 'home' | 'content'
   showMainContainer?: boolean
   navContent?: React.ReactNode
   headerProps?: Omit<PublicHeaderProps, 'navContent'>
@@ -39,6 +40,7 @@ export function PublicLayout(props: PublicLayoutProps) {
   return (
     <div
       data-public-brand={siteBrand}
+      data-public-surface={props.surface ?? 'content'}
       className='bg-background text-foreground relative min-h-svh overflow-x-clip'
     >
       <PublicHeader

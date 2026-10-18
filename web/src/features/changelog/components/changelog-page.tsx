@@ -52,6 +52,14 @@ export function ChangelogPage() {
           <p className='text-muted-foreground text-sm leading-6'>
             {t('Grouped by month, with the latest updates first.')}
           </p>
+          <div role='note' className='bg-muted/40 border px-3 py-2 text-sm'>
+            <p className='font-medium'>{t('Sample release notes')}</p>
+            <p className='text-muted-foreground mt-1 leading-6'>
+              {t(
+                "These entries preview the page layout and are not this site's release history."
+              )}
+            </p>
+          </div>
         </header>
 
         <Separator />

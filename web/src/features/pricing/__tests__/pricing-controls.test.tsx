@@ -31,6 +31,9 @@ function toolbarProps(): PricingToolbarProps {
   return {
     filteredCount: 2,
     totalCount: 2,
+    searchInput: '',
+    onSearchChange: vi.fn(),
+    onSearchClear: vi.fn(),
     sortBy: 'name',
     tokenUnit: 'M',
     showRechargePrice: false,
@@ -61,6 +64,38 @@ function toolbarProps(): PricingToolbarProps {
 }
 
 describe('pricing controls', () => {
+  it('searches and clears models from the catalog toolbar with keyboard focus support', async () => {
+    const props = toolbarProps()
+    const user = userEvent.setup()
+    const { rerender } = render(<PricingToolbar {...props} />)
+    const search = screen.getByRole('textbox', { name: 'Search models' })
+
+    await user.keyboard('{Control>}k{/Control}')
+    expect(search).toHaveFocus()
+    await user.type(search, 'c')
+    expect(props.onSearchChange).toHaveBeenCalledWith('c')
+
+    rerender(<PricingToolbar {...props} searchInput='claude' />)
+    expect(search).toHaveValue('claude')
+    await user.keyboard('{Escape}')
+    expect(search).not.toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(props.onSearchClear).toHaveBeenCalledOnce()
+  })
+
+  it('lets the search and display controls wrap independently on narrow screens', () => {
+    render(<PricingToolbar {...toolbarProps()} />)
+    const search = screen.getByRole('search', { name: 'Search models' })
+    const viewMode = screen.getByRole('group', { name: 'View mode' })
+
+    expect(search).toHaveClass('min-w-0', 'flex-1')
+    expect(search.parentElement).toHaveClass('flex-wrap')
+    expect(viewMode.parentElement).toHaveClass('flex-wrap')
+    expect(screen.getByRole('button', { name: 'Filter' })).toHaveClass(
+      'xl:hidden'
+    )
+  })
+
   it('counts each model once per filter and updates counts when the catalog changes', () => {
     const props = toolbarProps()
     const base: PricingModel = {

@@ -97,7 +97,7 @@ function FilterChip(props: {
       size='sm'
       onClick={props.onClick}
       aria-pressed={props.active}
-      className='h-auto max-w-full gap-1.5 px-2 py-1 text-xs'
+      className='h-auto max-w-full gap-1.5 rounded-none px-2 py-1 text-xs'
       title={props.option.label}
     >
       {props.option.icon && (
@@ -107,7 +107,7 @@ function FilterChip(props: {
       {(props.option.suffix || props.option.count != null) && (
         <span
           className={cn(
-            'rounded-md px-1.5 py-0.5 text-[12px]',
+            'shrink-0 px-1 py-0.5 text-[10px]',
             props.active
               ? 'bg-background text-foreground'
               : 'bg-muted text-muted-foreground'
@@ -265,7 +265,7 @@ export const PricingSidebar = memo(function PricingSidebar(
   ]
 
   return (
-    <aside className={cn('bg-card rounded-xl border p-3', props.className)}>
+    <aside className={cn('bg-card min-w-0 border p-3', props.className)}>
       <div className='mb-2.5 flex items-center justify-between gap-2'>
         <div>
           <h2 className='text-foreground text-sm font-bold'>{t('Filter')}</h2>
@@ -292,7 +292,7 @@ export const PricingSidebar = memo(function PricingSidebar(
         </Badge>
       )}
 
-      <div className='space-y-1'>
+      <div className='flex flex-col gap-1'>
         <FilterSection
           title={t('Groups')}
           value={props.groupFilter}

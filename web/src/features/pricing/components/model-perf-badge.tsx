@@ -80,7 +80,7 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
         props.className
       )}
     >
-      <dl className='flex min-w-0 items-start gap-5 text-xs tabular-nums'>
+      <dl className='flex min-w-0 flex-wrap items-start gap-x-5 gap-y-2 text-xs tabular-nums'>
         <div className='w-24 shrink-0'>
           <dt
             title={t(

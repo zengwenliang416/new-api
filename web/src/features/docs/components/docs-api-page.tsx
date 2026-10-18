@@ -40,6 +40,7 @@ import {
   filterNavGroups,
 } from '../lib/search-endpoints'
 import { useApiBaseUrl } from '../lib/use-api-base-url'
+import { DocsAssistantPreview } from './docs-assistant-preview'
 import { EndpointCodePanel } from './endpoint-code-panel'
 import { EndpointDetail } from './endpoint-detail'
 import { EndpointsPanel } from './endpoints-panel'
@@ -55,6 +56,8 @@ export function DocsApiPage() {
   const [activeCodeLanguage, setActiveCodeLanguage] = useState('cURL')
   const [activeResponseStatus, setActiveResponseStatus] = useState('200')
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const mobileSheetTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const apiBaseUrl = useApiBaseUrl()
   const endpoint = getEndpoint(activeEndpointId)
@@ -99,12 +102,18 @@ export function DocsApiPage() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        searchInputRef.current?.focus()
+        if (mobileSheetOpen) {
+          mobileSearchInputRef.current?.focus()
+        } else if (window.matchMedia('(min-width: 1024px)').matches) {
+          searchInputRef.current?.focus()
+        } else {
+          setMobileSheetOpen(true)
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [mobileSheetOpen])
 
   const handleSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -151,9 +160,12 @@ export function DocsApiPage() {
               {t('Back to docs')}
             </Link>
             <Button
+              ref={mobileSheetTriggerRef}
               type='button'
               variant='outline'
               size='sm'
+              aria-haspopup='dialog'
+              aria-expanded={mobileSheetOpen}
               onClick={() => setMobileSheetOpen(true)}
             >
               <HugeiconsIcon
@@ -202,6 +214,8 @@ export function DocsApiPage() {
         </div>
         <EndpointsSheet
           open={mobileSheetOpen}
+          searchInputRef={mobileSearchInputRef}
+          triggerRef={mobileSheetTriggerRef}
           query={query}
           activeQuery={activeQuery}
           filteredNavGroups={filteredNavGroups}
@@ -212,6 +226,7 @@ export function DocsApiPage() {
           onQueryChange={handleQueryChange}
           onEndpointSelect={handleEndpointSelect}
         />
+        <DocsAssistantPreview />
       </main>
     </PublicLayout>
   )

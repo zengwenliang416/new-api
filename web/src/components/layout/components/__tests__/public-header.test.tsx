@@ -33,6 +33,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import {
   afterEach,
   assert,
@@ -43,21 +44,24 @@ import {
   vi,
 } from 'vitest'
 
+import { DirectionProvider } from '@/context/direction-provider'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
+import { AuthenticatedLayout } from '../authenticated-layout'
 import { PublicHeader } from '../public-header'
+import { PublicLayout } from '../public-layout'
 
 const clients: QueryClient[] = []
 
-async function renderHeader(path = '/') {
+function renderLayout(content: ReactNode, path = '/') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   clients.push(client)
   client.setQueryData(['status'], {})
   client.setQueryData(['notice'], { success: true, data: '' })
-  const rootRoute = createRootRoute({ component: PublicHeader })
+  const rootRoute = createRootRoute({ component: () => content })
   const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' })
   const otherRoute = createRoute({ getParentRoute: () => rootRoute, path: '$' })
   const router = createRouter({
@@ -66,9 +70,15 @@ async function renderHeader(path = '/') {
   })
   render(
     <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
+      <DirectionProvider>
+        <RouterProvider router={router} />
+      </DirectionProvider>
     </QueryClientProvider>
   )
+}
+
+async function renderHeader(path = '/') {
+  renderLayout(<PublicHeader />, path)
   return screen.findByRole('button', { name: 'Toggle navigation menu' })
 }
 
@@ -81,6 +91,62 @@ beforeEach(() => {
   Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 })
 })
 
+describe('layout brand surfaces', () => {
+  test('uses the compact content surface for public pages unless the home surface is requested', async () => {
+    useSystemConfigStore.getState().setConfig({ siteBrand: 'motioncover' })
+    renderLayout(
+      <PublicLayout>
+        <h1>Public content</h1>
+      </PublicLayout>
+    )
+
+    const heading = await screen.findByRole('heading', {
+      name: 'Public content',
+    })
+    const surface = heading.closest('[data-public-brand]')
+    expect(surface).toHaveAttribute('data-public-brand', 'motioncover')
+    expect(surface).toHaveAttribute('data-public-surface', 'content')
+    expect(surface).toContainElement(screen.getByRole('banner'))
+  })
+
+  test('keeps the home surface on the shared public shell when explicitly selected', async () => {
+    useSystemConfigStore.getState().setConfig({ siteBrand: 'motioncover' })
+    renderLayout(
+      <PublicLayout surface='home'>
+        <h1>Home content</h1>
+      </PublicLayout>
+    )
+
+    const heading = await screen.findByRole('heading', { name: 'Home content' })
+    expect(heading.closest('[data-public-brand]')).toHaveAttribute(
+      'data-public-surface',
+      'home'
+    )
+  })
+
+  test('applies the configured console brand to the shared header, sidebar, and page content', async () => {
+    useSystemConfigStore.getState().setConfig({ siteBrand: 'motioncover' })
+    renderLayout(
+      <AuthenticatedLayout>
+        <h1>Console content</h1>
+      </AuthenticatedLayout>,
+      '/dashboard'
+    )
+
+    const heading = await screen.findByRole('heading', {
+      name: 'Console content',
+    })
+    const surface = heading.closest('[data-console-brand]')
+    expect(surface).toHaveAttribute('data-console-brand', 'motioncover')
+    expect(surface).toContainElement(screen.getByRole('banner'))
+    expect(surface).toContainElement(screen.getByRole('main'))
+    expect(surface).toContainElement(
+      screen.getAllByRole('button', { name: 'Toggle Sidebar' })[0]
+    )
+    expect(surface).not.toHaveAttribute('data-public-brand')
+  })
+})
+
 afterEach(() => {
   cleanup()
   clients.splice(0).forEach((client) => client.clear())
@@ -88,6 +154,7 @@ afterEach(() => {
   useSystemConfigStore.setState(useSystemConfigStore.getInitialState(), true)
   localStorage.clear()
   document.body.style.overflow = ''
+  document.documentElement.removeAttribute('dir')
   Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 })
 })
 
