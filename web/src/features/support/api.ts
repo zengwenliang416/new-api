@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/http-client'
+import { createServerError } from '@/lib/server-error-message'
 
 import { SUPPORT_TOKEN_ERROR_MESSAGES } from './constants'
 import type {
@@ -44,6 +45,13 @@ export class SupportWorkerRequestError extends Error {
   }
 }
 
+export class SupportWorkerNotConfiguredError extends Error {
+  constructor() {
+    super('support worker is not configured')
+    this.name = 'SupportWorkerNotConfiguredError'
+  }
+}
+
 /** Whether an error means the cached worker session token is no longer valid. */
 export function isSupportTokenError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
@@ -60,7 +68,10 @@ export async function getSupportSession(): Promise<SupportSession> {
     skipErrorHandler: true,
   })
   if (!res.data.success) {
-    throw new Error(res.data.message || 'Failed to connect support worker')
+    if (res.data.message === 'support worker is not configured') {
+      throw new SupportWorkerNotConfiguredError()
+    }
+    throw createServerError(res.data, 'Failed to connect support worker')
   }
   return res.data.data as SupportSession
 }

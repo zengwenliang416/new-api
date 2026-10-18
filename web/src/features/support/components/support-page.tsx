@@ -29,7 +29,10 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
+import { LoadingState } from '@/components/loading-state'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -109,6 +112,9 @@ export function SupportPage(props: SupportPageProps) {
     session,
     statusCounts,
     unreadCount,
+    isLoading,
+    isNotConfigured,
+    error,
     refetch: refetchSummary,
   } = useSupportSession(scope)
 
@@ -252,6 +258,48 @@ export function SupportPage(props: SupportPageProps) {
     void ticketsQuery.refetch()
     queryClient.invalidateQueries({ queryKey: SUPPORT_TICKET_QUERY_KEY })
     refetchSummary()
+  }
+
+  if (!session) {
+    let sessionState: ReactNode
+    if (isLoading) {
+      sessionState = <LoadingState />
+    } else if (isNotConfigured) {
+      sessionState = (
+        <EmptyState
+          icon={MessagesSquare}
+          title={t('Support Center is not enabled')}
+          description={t(
+            'Please contact your site administrator for assistance.'
+          )}
+          action={
+            <Button type='button' variant='outline' onClick={refetchSummary}>
+              {t('Retry')}
+            </Button>
+          }
+        />
+      )
+    } else {
+      sessionState = (
+        <ErrorState
+          title={t('Failed to connect support worker')}
+          description={getSupportErrorMessage(
+            error,
+            'Failed to connect support worker',
+            t
+          )}
+          onRetry={refetchSummary}
+        />
+      )
+    }
+    return (
+      <SectionPageLayout>
+        <SectionPageLayout.Title>
+          {t(scope === 'admin' ? 'Support Tickets' : 'Support Center')}
+        </SectionPageLayout.Title>
+        <SectionPageLayout.Content>{sessionState}</SectionPageLayout.Content>
+      </SectionPageLayout>
+    )
   }
 
   let detailPane: ReactNode
@@ -474,42 +522,68 @@ export function SupportPage(props: SupportPageProps) {
         </div>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='grid h-full min-h-0 grid-rows-[minmax(14rem,40vh)_minmax(0,1fr)] gap-3 md:grid-cols-[minmax(17rem,24rem)_minmax(0,1fr)] md:grid-rows-1 2xl:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)]'>
-          <div className='min-h-0'>
-            <TicketList
-              scope={scope}
-              pages={ticketsQuery.data?.pages}
-              statusCounts={statusCounts}
-              unreadCount={unreadCount}
-              filters={search}
-              activeTicketId={selectedId ?? undefined}
-              isLoading={ticketsQuery.isLoading}
-              error={ticketsQuery.error}
-              hasNextPage={ticketsQuery.hasNextPage}
-              isFetchingNextPage={ticketsQuery.isFetchingNextPage}
-              onRetry={() => void ticketsQuery.refetch()}
-              onLoadMore={() => void ticketsQuery.fetchNextPage()}
-              onSelect={(ticketId) => patchSearch({ ticket: String(ticketId) })}
-              onStatusChange={(next) =>
-                patchSearch({
-                  status: next === 'all' ? undefined : next,
-                })
-              }
-              onClearFilters={() =>
-                patchSearch({
-                  status: undefined,
-                  category: undefined,
-                  priority: undefined,
-                  verification: undefined,
-                  sort: undefined,
-                  unread: undefined,
-                  q: undefined,
-                  user_id: undefined,
-                })
-              }
-            />
+        <div className='flex h-full min-h-0 flex-col gap-3'>
+          {error && (
+            <Alert variant='destructive' className='shrink-0'>
+              <AlertTitle>{t('Failed to load ticket summary')}</AlertTitle>
+              <AlertDescription className='space-y-2'>
+                <p>
+                  {getSupportErrorMessage(
+                    error,
+                    'Failed to load ticket summary',
+                    t
+                  )}
+                </p>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={refetchSummary}
+                >
+                  {t('Retry')}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className='grid min-h-0 flex-1 grid-rows-[minmax(14rem,40vh)_minmax(0,1fr)] gap-3 md:grid-cols-[minmax(17rem,24rem)_minmax(0,1fr)] md:grid-rows-1 2xl:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)]'>
+            <div className='min-h-0'>
+              <TicketList
+                scope={scope}
+                pages={ticketsQuery.data?.pages}
+                statusCounts={statusCounts}
+                unreadCount={unreadCount}
+                filters={search}
+                activeTicketId={selectedId ?? undefined}
+                isLoading={ticketsQuery.isLoading}
+                error={ticketsQuery.error}
+                hasNextPage={ticketsQuery.hasNextPage}
+                isFetchingNextPage={ticketsQuery.isFetchingNextPage}
+                onRetry={() => void ticketsQuery.refetch()}
+                onLoadMore={() => void ticketsQuery.fetchNextPage()}
+                onSelect={(ticketId) =>
+                  patchSearch({ ticket: String(ticketId) })
+                }
+                onStatusChange={(next) =>
+                  patchSearch({
+                    status: next === 'all' ? undefined : next,
+                  })
+                }
+                onClearFilters={() =>
+                  patchSearch({
+                    status: undefined,
+                    category: undefined,
+                    priority: undefined,
+                    verification: undefined,
+                    sort: undefined,
+                    unread: undefined,
+                    q: undefined,
+                    user_id: undefined,
+                  })
+                }
+              />
+            </div>
+            <div className='min-h-0'>{detailPane}</div>
           </div>
-          <div className='min-h-0'>{detailPane}</div>
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

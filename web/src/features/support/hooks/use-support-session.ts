@@ -26,6 +26,7 @@ import {
   getSupportSession,
   getSupportSummary,
   isSupportTokenError,
+  SupportWorkerNotConfiguredError,
 } from '../api'
 import {
   EMPTY_SUMMARY_STATUS_COUNTS,
@@ -58,6 +59,7 @@ export interface UseSupportSessionResult {
   isLoading: boolean
   error: Error | null
   isEnabled: boolean
+  isNotConfigured: boolean
   refetch: () => void
 }
 
@@ -78,19 +80,27 @@ export function useSupportSession(
     queryFn: getSupportSession,
     enabled,
     staleTime: SUPPORT_SESSION_STALE_MS,
-    refetchInterval: SUPPORT_SESSION_REFETCH_MS,
+    refetchInterval: (query) =>
+      query.state.error instanceof SupportWorkerNotConfiguredError
+        ? false
+        : SUPPORT_SESSION_REFETCH_MS,
     retry: false,
+    meta: { errorToast: false, errorRedirect: false },
   })
 
+  const session =
+    enabled && !sessionQuery.error ? (sessionQuery.data ?? null) : null
+
   const summaryQuery = useQuery({
-    queryKey: [...SUPPORT_SUMMARY_QUERY_KEY, scope, sessionQuery.data?.token],
+    queryKey: [...SUPPORT_SUMMARY_QUERY_KEY, scope, session?.token],
     queryFn: () => {
-      if (!sessionQuery.data) throw new Error('Support worker is unavailable')
-      return getSupportSummary(sessionQuery.data, scope)
+      if (!session) throw new Error('Support worker is unavailable')
+      return getSupportSummary(session, scope)
     },
-    enabled: !!sessionQuery.data && enabled,
+    enabled: !!session,
     refetchInterval: SUPPORT_DATA_REFETCH_MS,
     retry: false,
+    meta: { errorToast: false, errorRedirect: false },
   })
 
   const tokenRef = useRef('')
@@ -104,7 +114,7 @@ export function useSupportSession(
     queryClient.invalidateQueries({ queryKey: SUPPORT_SUMMARY_QUERY_KEY })
   }, [queryClient, sessionQuery.data?.token, summaryQuery.error])
 
-  const summary = summaryQuery.data ?? null
+  const summary = session ? (summaryQuery.data ?? null) : null
   const unreadCount = summary?.unread_count ?? 0
   const pendingCount = summary?.pending_count ?? 0
   const attentionCount =
@@ -113,7 +123,7 @@ export function useSupportSession(
     summary?.latest_attention ?? summary?.latest_unread ?? EMPTY_LATEST_TICKETS
 
   return {
-    session: sessionQuery.data ?? null,
+    session,
     summary,
     unreadCount,
     pendingCount,
@@ -124,11 +134,18 @@ export function useSupportSession(
     },
     latestUnread: summary?.latest_unread ?? EMPTY_LATEST_TICKETS,
     latestAttention,
-    isLoading: sessionQuery.isLoading || summaryQuery.isLoading,
+    isLoading: (!session && sessionQuery.isFetching) || summaryQuery.isLoading,
     error: sessionQuery.error ?? summaryQuery.error ?? null,
     isEnabled: enabled,
+    isNotConfigured:
+      sessionQuery.error instanceof SupportWorkerNotConfiguredError,
     refetch: () => {
-      summaryQuery.refetch()
+      if (!enabled) return
+      if (!session) {
+        void sessionQuery.refetch()
+        return
+      }
+      void summaryQuery.refetch()
     },
   }
 }
