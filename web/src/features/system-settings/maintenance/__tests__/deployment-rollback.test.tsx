@@ -80,7 +80,9 @@ describe('deployment rollback', () => {
       'This restarts the API on the previous image. MySQL and stored data stay in place.'
     )
     await user.click(
-      within(dialog).getByRole('button', { name: 'Switch to the previous image' })
+      within(dialog).getByRole('button', {
+        name: 'Switch to the previous image',
+      })
     )
     expect(post).toHaveBeenCalledWith('/api/deploy/rollback')
   })

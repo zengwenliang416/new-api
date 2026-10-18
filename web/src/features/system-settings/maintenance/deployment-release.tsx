@@ -111,7 +111,8 @@ export function DeploymentReleasePanel() {
       return
     }
     const switched =
-      targetImage.current !== '' && release.current_image === targetImage.current
+      targetImage.current !== '' &&
+      release.current_image === targetImage.current
     if (release.rollback_state === 'succeeded' || switched) {
       setWaiting(false)
       toast.success(t('The API is running the previous image.'))
@@ -124,19 +125,24 @@ export function DeploymentReleasePanel() {
   } else if (!release.rollback_available && !waiting) {
     unavailable = t('No previous image is available.')
   }
-  const pending = waiting || rollback.isPending || release.rollback_state === 'running'
+  const pending =
+    waiting || rollback.isPending || release.rollback_state === 'running'
 
   return (
     <div className='space-y-4'>
       <div className='grid gap-4 md:grid-cols-2'>
         <div className='min-w-0 rounded-lg border p-4'>
-          <div className='text-muted-foreground text-sm'>{t('Current image')}</div>
+          <div className='text-muted-foreground text-sm'>
+            {t('Current image')}
+          </div>
           <div className='text-sm font-medium break-all'>
             {release.current_image || t('Unknown')}
           </div>
         </div>
         <div className='min-w-0 rounded-lg border p-4'>
-          <div className='text-muted-foreground text-sm'>{t('Previous image')}</div>
+          <div className='text-muted-foreground text-sm'>
+            {t('Previous image')}
+          </div>
           <div className='text-sm font-medium break-all'>
             {release.previous_image || t('Unknown')}
           </div>

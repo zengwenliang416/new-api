@@ -546,9 +546,9 @@ describe('version notification preferences', () => {
     useSystemUpdateStore.setState({ snapshot: null })
     useSystemUpdateStore.persist.clearStorage()
     useSystemUpdatePreferencesStore.setState({
-    ignoredVersionsByUserId: {},
-    checksEnabled: true,
-  })
+      ignoredVersionsByUserId: {},
+      checksEnabled: true,
+    })
     localStorage.setItem('system-update-preferences:v1', String(saved))
     await useSystemUpdatePreferencesStore.persist.rehydrate()
     client = createAppQueryClient()

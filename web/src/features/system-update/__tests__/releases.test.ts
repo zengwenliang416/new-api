@@ -81,14 +81,16 @@ describe('system release ordering', () => {
       prerelease: false,
       commit_sha: sha,
     }
-    expect(deploymentMatchesCommit(`v1.0.0-rc.41+${sha.slice(0, 12)}`, sha)).toBe(
-      true
-    )
-    expect(deploymentMatchesCommit('v1.0.0-rc.41+338a25f64a74', sha)).toBe(false)
-    expect(deploymentMatchesCommit(sha, sha)).toBe(false)
-    expect(deploymentHasUpdate(`v1.0.0-rc.41+${sha.slice(0, 12)}`, release)).toBe(
+    expect(
+      deploymentMatchesCommit(`v1.0.0-rc.41+${sha.slice(0, 12)}`, sha)
+    ).toBe(true)
+    expect(deploymentMatchesCommit('v1.0.0-rc.41+338a25f64a74', sha)).toBe(
       false
     )
+    expect(deploymentMatchesCommit(sha, sha)).toBe(false)
+    expect(
+      deploymentHasUpdate(`v1.0.0-rc.41+${sha.slice(0, 12)}`, release)
+    ).toBe(false)
     expect(deploymentHasUpdate('v1.0.0-rc.41+338a25f64a74', release)).toBe(true)
     expect(deploymentHasUpdate('v1.0.0-rc.35', release)).toBe(true)
     expect(deploymentHasUpdate(sha, release)).toBe(false)

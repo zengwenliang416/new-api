@@ -38,7 +38,11 @@ import {
   UpdateCheckError,
   type UpdateCheckErrorCode,
 } from './api'
-import { compareSystemVersions, deploymentHasUpdate, deploymentMatchesCommit } from './releases'
+import {
+  compareSystemVersions,
+  deploymentHasUpdate,
+  deploymentMatchesCommit,
+} from './releases'
 import {
   subscribeSystemUpdatePreferences,
   useSystemUpdatePreferencesStore,

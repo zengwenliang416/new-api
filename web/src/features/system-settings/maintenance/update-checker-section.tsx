@@ -18,13 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
-import { SystemUpdateAction } from '@/features/system-update/system-update-action'
 import { useSystemUpdatePreferencesStore } from '@/features/system-update/store'
+import { SystemUpdateAction } from '@/features/system-update/system-update-action'
 import { useStatus } from '@/hooks/use-status'
 import { formatTimestamp } from '@/lib/format'
 
-import { SettingsSection } from '../components/settings-section'
 import { SettingsSwitchField } from '../components/settings-form-layout'
+import { SettingsSection } from '../components/settings-section'
 import { DeploymentReleasePanel } from './deployment-release'
 
 type UpdateCheckerSectionProps = {

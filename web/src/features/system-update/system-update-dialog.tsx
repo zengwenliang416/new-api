@@ -110,7 +110,9 @@ export function SystemUpdateDialog(props: SystemUpdateDialogProps) {
           <Button
             type='button'
             variant='outline'
-            disabled={update.checking || !update.online || !update.checksEnabled}
+            disabled={
+              update.checking || !update.online || !update.checksEnabled
+            }
             onClick={() => void update.checkNow()}
           >
             {update.checking ? t('Checking updates...') : t('Check again')}

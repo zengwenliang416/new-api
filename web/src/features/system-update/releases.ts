@@ -150,7 +150,9 @@ export function deploymentHasUpdate(
 ): boolean {
   if (!currentVersion || !release) return false
   if (release.commit_sha) {
-    if (deploymentMatchesCommit(currentVersion, release.commit_sha)) return false
+    if (deploymentMatchesCommit(currentVersion, release.commit_sha)) {
+      return false
+    }
     if (deploymentBuild(currentVersion)) return true
     return parseSystemVersion(currentVersion) !== null
   }
