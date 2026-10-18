@@ -24,6 +24,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	modelprobe "github.com/QuantumNous/new-api/pkg/model_probe"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/pkg/wsmanager"
 	"github.com/QuantumNous/new-api/relay"
@@ -206,6 +207,8 @@ func main() {
 		BuildFS:   buildFS,
 		IndexPage: indexPage,
 	})
+	modelprobe.SetRelayHandler(server)
+	service.RegisterSystemTaskHandler(modelprobe.Handler{})
 	var port = os.Getenv("PORT")
 	if port == "" {
 		port = strconv.Itoa(*common.Port)

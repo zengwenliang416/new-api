@@ -4,6 +4,7 @@ import (
 	"maps"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -11,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/model_probe_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -25,6 +27,8 @@ type Option struct {
 }
 
 const defaultThirdPartyReportsJSON = `[]`
+
+var modelProbeOptionsMu sync.Mutex
 
 func AllOption() ([]*Option, error) {
 	var options []*Option
@@ -217,6 +221,10 @@ func InitOptionMap() {
 }
 
 func loadOptionsFromDatabase() {
+	// Use the same order as bulk updates and serialize the DB read too, so an
+	// older reload snapshot cannot overwrite a newly committed probe config.
+	modelProbeOptionsMu.Lock()
+	defer modelProbeOptionsMu.Unlock()
 	requestPolicyOptionMutex.Lock()
 	defer requestPolicyOptionMutex.Unlock()
 	defer func() {
@@ -228,7 +236,12 @@ func loadOptionsFromDatabase() {
 	defer passkeyOptionMutex.Unlock()
 	options, _ := AllOption()
 	passkeyOptions := make(map[string]string)
+	probeOptions := make(map[string]string)
 	for _, option := range options {
+		if strings.HasPrefix(option.Key, model_probe_setting.Prefix) {
+			probeOptions[option.Key] = option.Value
+			continue
+		}
 		if IsPasskeyDomainOption(option.Key) {
 			passkeyOptions[option.Key] = option.Value
 			continue
@@ -236,6 +249,16 @@ func loadOptionsFromDatabase() {
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
 			common.SysLog("failed to update option map: " + err.Error())
+		}
+	}
+	if len(probeOptions) > 0 {
+		if err := model_probe_setting.ValidateOptions(probeOptions); err != nil {
+			common.SysError("invalid model probe configuration during reload")
+		} else {
+			common.OptionMapRWMutex.Lock()
+			maps.Copy(common.OptionMap, probeOptions)
+			_ = config.GlobalConfig.LoadFromDB(probeOptions)
+			common.OptionMapRWMutex.Unlock()
 		}
 	}
 	applyPasskeyDomainOptions(passkeyOptions)
@@ -269,6 +292,9 @@ func validateOptionValue(key string, value string) error {
 }
 
 func UpdateOption(key string, value string) error {
+	if strings.HasPrefix(key, model_probe_setting.Prefix) {
+		return UpdateOptionsBulk(map[string]string{key: value})
+	}
 	if IsRequestPolicyOption(key) {
 		return UpdateRequestPolicyOptions(map[string]string{key: value})
 	}
@@ -305,6 +331,26 @@ func UpdateOption(key string, value string) error {
 func UpdateOptionsBulk(values map[string]string) error {
 	if len(values) == 0 {
 		return nil
+	}
+	probeValues := make(map[string]string)
+	for key, value := range values {
+		if strings.HasPrefix(key, model_probe_setting.Prefix) {
+			probeValues[key] = value
+		}
+	}
+	if len(probeValues) > 0 {
+		modelProbeOptionsMu.Lock()
+		defer modelProbeOptionsMu.Unlock()
+		if err := model_probe_setting.ValidateOptions(probeValues); err != nil {
+			return err
+		}
+		candidate := model_probe_setting.GetSetting()
+		if err := model_probe_setting.ApplyOptions(&candidate, probeValues); err != nil {
+			return err
+		}
+		if err := ValidateModelProbeIdentity(candidate); err != nil {
+			return err
+		}
 	}
 	for key := range values {
 		if IsPasskeyDomainOption(key) {
@@ -354,7 +400,23 @@ func UpdateOptionsBulk(values map[string]string) error {
 		return err
 	}
 	for k, v := range values {
+		if strings.HasPrefix(k, model_probe_setting.Prefix) {
+			continue
+		}
 		if err := updateOptionMap(k, v); err != nil {
+			return err
+		}
+	}
+	if len(probeValues) > 0 {
+		// Publish the related fields together: a running scheduler must never
+		// observe a new account with targets from the previous configuration.
+		common.OptionMapRWMutex.Lock()
+		for key, value := range probeValues {
+			common.OptionMap[key] = value
+		}
+		err = config.GlobalConfig.LoadFromDB(probeValues)
+		common.OptionMapRWMutex.Unlock()
+		if err != nil {
 			return err
 		}
 	}

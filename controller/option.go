@@ -240,6 +240,10 @@ func UpdateOption(c *gin.Context) {
 		})
 		return
 	}
+	if strings.HasPrefix(option.Key, "model_probe_setting.") {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "save model probe settings together through /api/option/bulk"})
+		return
+	}
 	switch option.Value.(type) {
 	case bool:
 		option.Value = common.Interface2String(option.Value.(bool))

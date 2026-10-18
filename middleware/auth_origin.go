@@ -34,6 +34,24 @@ func SessionCookieOriginGuard() gin.HandlerFunc {
 	}
 }
 
+// DashboardWriteOriginGuard protects new state-changing dashboard operations
+// after authentication. Bearer credentials are not ambient browser authority;
+// cookie sessions must present a trusted Origin/Referer even in local mode.
+func DashboardWriteOriginGuard() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.GetBool("use_access_token") {
+			c.Next()
+			return
+		}
+		origin, ok := requestBrowserOrigin(c.Request)
+		if !ok || !isAllowedSessionOrigin(c.Request, origin) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "AUTH_ORIGIN_FORBIDDEN", "message": "request origin is not allowed"})
+			return
+		}
+		c.Next()
+	}
+}
+
 func requestBrowserOrigin(request *http.Request) (string, bool) {
 	originValues := request.Header.Values("Origin")
 	if len(originValues) > 1 {

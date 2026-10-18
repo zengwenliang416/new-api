@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
+	"github.com/QuantumNous/new-api/setting/model_probe_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/support_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
@@ -47,6 +48,7 @@ func TestStatus(c *gin.Context) {
 func GetStatus(c *gin.Context) {
 
 	cs := console_setting.GetConsoleSetting()
+	probeSetting := model_probe_setting.GetSetting()
 	passkeySetting := system_setting.PasskeySettingsSnapshot()
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
@@ -66,6 +68,7 @@ func GetStatus(c *gin.Context) {
 	}
 
 	data := gin.H{
+		"model_probe_enabled":            probeSetting.Enabled,
 		"version":                        common.Version,
 		"start_time":                     common.StartTime,
 		"email_verification":             common.EmailVerificationEnabled,
