@@ -1,0 +1,63 @@
+# New API public documentation
+
+> Generated from the same guides and endpoint definitions used by the documentation UI.
+
+This is a static API and setup reference. It does not contain private keys, account data, live model availability, prices, or administrator-configured FAQ entries.
+Replace https://your-gateway.example with the API root shown by your deployment. The API origin may differ from the documentation website.
+Model IDs in examples are illustrative: select a model available to your own key and group. Use NEW_API_KEY or another client-specific environment variable for credentials.
+Relative documentation links resolve against the frontend website. Check /pricing and authenticated /v1/models for current deployment information.
+
+Project: [QuantumNous/new-api](https://github.com/QuantumNous/new-api)
+
+## Complete reference
+
+- [Full Markdown reference](/llms-full.txt)
+
+## Guides
+
+- [Quick start: first request in 5 minutes](/docs/guides/quick-start): Register, create an API key, and send your first request to the gateway.
+- [Image generation and response formats](/docs/guides/image-gen): Generate and edit images using the formats supported by your selected model.
+- [Use an AI assistant with the API reference](/docs/guides/image-api-skill): Share public API documentation without sharing account credentials.
+- [API key groups and automatic routing](/docs/guides/groups-and-chains): Choose a key group and configure the available automatic group order.
+- [Group access and account restrictions](/docs/guides/coding-deposit): Check available groups and ask the site operator about access requirements.
+- [Understanding prices and usage](/docs/guides/kiro-credit-billing): Use the current pricing page and usage records to check request charges.
+- [Endpoints & local speed test](/docs/guides/local-speed-test): Distinguish basic endpoint reachability from a successful authenticated model request.
+- [Support Center: tickets & replies](/docs/guides/support-center): Create tickets, provide useful evidence, and follow the status shown by the support service.
+- [Platform tour: wallet, logs, security & more](/docs/guides/platform-tour): Find the current key, wallet, usage, security, and support features.
+- [Configure XiaoBaiSwitch manually](/docs/guides/xiaobai-switch): Configure a third-party client with the site address, key, and supported protocol.
+- [One-click setup with CC Switch](/docs/guides/cc-switch): Import a supported client configuration from the API key action menu.
+- [Use with Claude Code](/docs/guides/claude-code): Point the Claude Code CLI at this site with two environment variables.
+- [Use with Codex CLI](/docs/guides/codex-cli): Configure config.toml so the Codex CLI talks to this gateway.
+- [Use DeepSeek with OpenCode & ZCode](/docs/guides/deepseek-coding): Connect a supported DeepSeek model through a compatible client provider.
+- [Use with AQBot](/docs/guides/aqbot): Configure an OpenAI-compatible provider in your installed AQBot version.
+- [Connect Claude Desktop](/docs/guides/claude-desktop): Check gateway support in your Claude Desktop version before configuring it.
+- [Use with Cherry Studio](/docs/guides/cherry-studio): Add this site as an OpenAI-type provider in Cherry Studio.
+- [Use with Immersive Translate](/docs/guides/immersive-translate): Drive Immersive Translate with models relayed through this site.
+- [Use with the OpenAI SDK](/docs/guides/openai-sdk): Call the gateway from Python or JavaScript with the official OpenAI SDK.
+- [Use with the Anthropic SDK](/docs/guides/anthropic-sdk): Call Claude-format endpoints from the official Anthropic SDK.
+- [Error codes & troubleshooting](/docs/guides/troubleshooting): Inspect HTTP status, response details, and the actual key and model configuration.
+
+## API reference
+
+- [List models](/docs/api#models-list): GET /v1/models
+- [Retrieve model details](/docs/api#models-retrieve): GET /v1/models/{model}
+- [ChatCompletions format](/docs/api#chat-completions): POST /v1/chat/completions
+- [Responses format](/docs/api#responses-create): POST /v1/responses
+- [Compact response](/docs/api#responses-compact): POST /v1/responses/compact
+- [Create completion](/docs/api#completions-create): POST /v1/completions
+- [Create embedding](/docs/api#embeddings-create): POST /v1/embeddings
+- [Create rerank request](/docs/api#rerank-create): POST /v1/rerank
+- [Create moderation](/docs/api#moderations-create): POST /v1/moderations
+- [Create speech](/docs/api#audio-speech): POST /v1/audio/speech
+- [Create transcription](/docs/api#audio-transcriptions): POST /v1/audio/transcriptions
+- [Create translation](/docs/api#audio-translations): POST /v1/audio/translations
+- [Open realtime session](/docs/api#realtime-open): GET /v1/realtime
+- [Create image generation](/docs/api#images-generations): POST /v1/images/generations
+- [Create image edit](/docs/api#images-edits): POST /v1/images/edits
+- [Create video](/docs/api#videos-create): POST /v1/videos
+- [Retrieve video task](/docs/api#videos-retrieve): GET /v1/videos/{task_id}
+- [Download video content](/docs/api#videos-content): GET /v1/videos/{task_id}/content
+- [Remix video](/docs/api#videos-remix): POST /v1/videos/{video_id}/remix
+- [Claude messages](/docs/api#claude-messages): POST /v1/messages
+- [Run Gemini model action](/docs/api#gemini-native): POST /v1beta/models/{model}:{action}
+- [Compatibility stubs](/docs/api#compatibility-stubs): GET /v1/files
