@@ -18,7 +18,26 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import { convertDetectedLanguage } from './languages'
+import { convertDetectedLanguage, toIntlLocale } from './languages'
+
+describe('toIntlLocale', () => {
+  test('maps every interface language onto a valid Intl locale', () => {
+    expect(toIntlLocale('zhCN')).toBe('zh-CN')
+    expect(toIntlLocale('zhTW')).toBe('zh-TW')
+    expect(toIntlLocale('en')).toBe('en')
+    expect(toIntlLocale('fr')).toBe('fr')
+    expect(toIntlLocale('ja')).toBe('ja')
+    expect(toIntlLocale('ru')).toBe('ru')
+    expect(toIntlLocale('vi')).toBe('vi')
+  })
+
+  test('falls back to undefined for missing or invalid languages', () => {
+    expect(toIntlLocale(undefined)).toBeUndefined()
+    expect(toIntlLocale(null)).toBeUndefined()
+    expect(toIntlLocale('')).toBeUndefined()
+    expect(toIntlLocale('not a locale')).toBeUndefined()
+  })
+})
 
 describe('convertDetectedLanguage', () => {
   test('maps browser BCP-47 Chinese tags onto interface codes', () => {
