@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 'use client'
+/* eslint-disable react/iframe-missing-sandbox -- upstream AI Elements preview intentionally permits scripts and same-origin so arbitrary sites render correctly */
 
 import { ChevronDownIcon } from 'lucide-react'
 import {
@@ -272,7 +273,7 @@ export const WebPreviewConsole = ({
           {logs.length === 0 ? (
             <p className='text-muted-foreground'>{t('No console output')}</p>
           ) : (
-            logs.map((log, index) => (
+            logs.map((log) => (
               <div
                 className={cn(
                   'text-xs',
@@ -280,7 +281,7 @@ export const WebPreviewConsole = ({
                   log.level === 'warn' && 'text-warning',
                   log.level === 'log' && 'text-foreground'
                 )}
-                key={`${log.timestamp.getTime()}-${index}`}
+                key={`${log.timestamp.getTime()}-${log.level}-${log.message}`}
               >
                 <span className='text-muted-foreground'>
                   {dayjs(log.timestamp).format('HH:mm:ss')}

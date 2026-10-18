@@ -42,6 +42,7 @@ type RequiredTextPart = {
 
 type NormalizedRequiredTextPart = RequiredTextPart & {
   inputIndex?: number
+  startOffset: number
 }
 
 type RiskAcknowledgementDialogProps = {
@@ -65,7 +66,7 @@ type RiskAcknowledgementDialogProps = {
 }
 
 function getRequiredTextRows(text: string) {
-  return Math.max(1, Math.ceil(Array.from(text).length / 42))
+  return Math.max(1, Math.ceil([...text].length / 42))
 }
 
 export function RiskAcknowledgementDialog({
@@ -98,17 +99,20 @@ export function RiskAcknowledgementDialog({
     return requiredTextParts.reduce<{
       parts: NormalizedRequiredTextPart[]
       inputIndex: number
+      offset: number
     }>(
       (acc, part) => {
-        if (part.type !== 'input') {
-          return { ...acc, parts: [...acc.parts, part] }
-        }
+        const nextPart: NormalizedRequiredTextPart =
+          part.type === 'input'
+            ? { ...part, inputIndex: acc.inputIndex, startOffset: acc.offset }
+            : { ...part, startOffset: acc.offset }
         return {
-          parts: [...acc.parts, { ...part, inputIndex: acc.inputIndex }],
-          inputIndex: acc.inputIndex + 1,
+          parts: [...acc.parts, nextPart],
+          inputIndex: acc.inputIndex + (part.type === 'input' ? 1 : 0),
+          offset: acc.offset + part.text.length,
         }
       },
-      { parts: [], inputIndex: 0 }
+      { parts: [], inputIndex: 0, offset: 0 }
     ).parts
   }, [requiredTextParts])
 
@@ -244,17 +248,17 @@ export function RiskAcknowledgementDialog({
               </div>
               {hasSegmentedRequiredText ? (
                 <div className='flex flex-col gap-2'>
-                  {normalizedRequiredTextParts.map((part, index) =>
+                  {normalizedRequiredTextParts.map((part) =>
                     part.type === 'static' ? (
                       <span
-                        key={`static-${index}`}
+                        key={`static-${part.startOffset}`}
                         className='text-muted-foreground bg-background/70 border-border w-fit rounded-md border px-2 py-1.5 font-mono text-sm select-none'
                       >
                         {part.text}
                       </span>
                     ) : (
                       <Textarea
-                        key={`input-${index}`}
+                        key={`input-${part.startOffset}`}
                         value={typedTextParts[part.inputIndex ?? 0] ?? ''}
                         onChange={(event) =>
                           handleTextPartChange(
