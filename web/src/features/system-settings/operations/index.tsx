@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useStatus } from '@/hooks/use-status'
 
 import { SettingsPage } from '../components/settings-page'
+import { DEFAULT_MODEL_PROBE_SETTINGS } from '../integrations/model-probe/types'
 import type { OperationsSettings } from '../types'
 import {
   OPERATIONS_DEFAULT_SECTION,
@@ -27,6 +28,7 @@ import {
 } from './section-registry.tsx'
 
 const defaultOperationsSettings: OperationsSettings = {
+  ...DEFAULT_MODEL_PROBE_SETTINGS,
   DefaultCollapseSidebar: false,
   DemoSiteEnabled: false,
   SelfUseModeEnabled: false,

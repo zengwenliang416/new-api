@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { ModelProbeSettings } from './integrations/model-probe/types'
+
 export type SystemOption = {
   key: string
   value: string
@@ -370,7 +372,7 @@ export type BillingSettings = {
   'checkin_setting.max_quota': number
 }
 
-export type OperationsSettings = {
+export type OperationsSettings = ModelProbeSettings & {
   DefaultCollapseSidebar: boolean
   DemoSiteEnabled: boolean
   SelfUseModeEnabled: boolean

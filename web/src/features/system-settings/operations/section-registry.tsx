@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
+import { ModelProbeSettingsSection } from '../integrations/model-probe/settings-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
 import { SupportWorkerSettingsSection } from '../integrations/support-worker-settings-section'
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
@@ -58,6 +59,13 @@ const OPERATIONS_SECTIONS = [
             settings['perf_metrics_setting.retention_days'] ?? 0,
         }}
       />
+    ),
+  },
+  {
+    id: 'model-probe',
+    titleKey: 'Intelligence monitoring',
+    build: (settings: OperationsSettings) => (
+      <ModelProbeSettingsSection defaultValues={settings} />
     ),
   },
   {
