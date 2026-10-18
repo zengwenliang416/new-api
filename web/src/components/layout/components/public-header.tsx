@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
@@ -78,6 +85,8 @@ export function PublicHeader(props: PublicHeaderProps) {
   const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const mobileMenuId = useId()
+  const mobileToggleRef = useRef<HTMLButtonElement>(null)
   const [authPromptTarget, setAuthPromptTarget] =
     useState<AuthPromptTarget | null>(null)
   const [authPromptSecondsLeft, setAuthPromptSecondsLeft] =
@@ -130,9 +139,27 @@ export function PublicHeader(props: PublicHeaderProps) {
   }, [])
 
   useEffect(() => {
-    document.body.style.overflow = mobileOpen ? 'hidden' : ''
+    if (!mobileOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      setMobileOpen(false)
+      mobileToggleRef.current?.focus()
+    }
+    const desktopQuery = window.matchMedia('(min-width: 1024px)')
+    const onDesktopChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setMobileOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    desktopQuery.addEventListener('change', onDesktopChange)
+
     return () => {
-      document.body.style.overflow = ''
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', onKeyDown)
+      desktopQuery.removeEventListener('change', onDesktopChange)
     }
   }, [mobileOpen])
 
@@ -203,7 +230,7 @@ export function PublicHeader(props: PublicHeaderProps) {
         <div
           className={cn(
             'pointer-events-auto mx-auto transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]',
-            scrolled ? 'max-w-[52rem] px-3 pt-3' : 'max-w-7xl px-4 pt-0 md:px-6'
+            scrolled ? 'max-w-6xl px-3 pt-3' : 'max-w-7xl px-4 pt-0 md:px-6'
           )}
         >
           <nav
@@ -238,9 +265,11 @@ export function PublicHeader(props: PublicHeaderProps) {
             </div>
 
             {/* Desktop nav */}
-            <div className='hidden min-w-0 items-center gap-0.5 lg:flex'>
+            <div className='hidden min-w-0 items-center gap-1 lg:flex'>
               {links.map((link) => {
-                const isActive = pathname === link.href
+                const isActive =
+                  pathname === link.href ||
+                  (link.href !== '/' && pathname.startsWith(`${link.href}/`))
                 if (link.external) {
                   return (
                     <a
@@ -253,7 +282,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                       tabIndex={link.disabled ? -1 : undefined}
                       onClick={(event) => handleNavLinkClick(event, link)}
                       className={cn(
-                        'text-muted-foreground hover:text-foreground min-w-0 truncate rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
+                        'text-muted-foreground hover:text-foreground min-w-0 truncate rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors duration-200',
                         link.disabled && 'pointer-events-none opacity-50'
                       )}
                     >
@@ -266,12 +295,13 @@ export function PublicHeader(props: PublicHeaderProps) {
                     key={`${link.title}:${link.href}`}
                     to={link.href}
                     title={t(link.title)}
+                    activeOptions={{ exact: link.href === '/' }}
                     disabled={link.disabled}
                     onClick={(event) => handleNavLinkClick(event, link)}
                     className={cn(
-                      'min-w-0 truncate rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
+                      'min-w-0 truncate rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors duration-200',
                       isActive
-                        ? 'text-foreground'
+                        ? 'bg-muted text-foreground'
                         : 'text-muted-foreground hover:text-foreground',
                       link.disabled && 'pointer-events-none opacity-50'
                     )}
@@ -287,8 +317,6 @@ export function PublicHeader(props: PublicHeaderProps) {
                 <div className='bg-border/40 mx-2 h-4 w-px' />
               )}
 
-              {showLanguageSwitcher && <LanguageSwitcher />}
-              {showThemeSwitch && <ThemeSwitch />}
               {showNotifications && (
                 <NotificationPopover
                   open={notifications.popoverOpen}
@@ -301,6 +329,8 @@ export function PublicHeader(props: PublicHeaderProps) {
                   loading={notifications.loading}
                 />
               )}
+              {showLanguageSwitcher && <LanguageSwitcher />}
+              {showThemeSwitch && <ThemeSwitch />}
 
               {showAuthButtons && (
                 <>
@@ -317,12 +347,15 @@ export function PublicHeader(props: PublicHeaderProps) {
                 <ProfileDropdown />
               )}
               <Button
+                ref={mobileToggleRef}
                 type='button'
                 variant='ghost'
                 size='icon'
                 className='size-9'
                 onClick={() => setMobileOpen((v) => !v)}
                 aria-label={t('Toggle navigation menu')}
+                aria-expanded={mobileOpen}
+                aria-controls={mobileMenuId}
               >
                 <div className='relative size-4'>
                   <span
@@ -352,17 +385,22 @@ export function PublicHeader(props: PublicHeaderProps) {
 
       {/* Mobile full-screen overlay */}
       <div
+        id={mobileMenuId}
+        inert={!mobileOpen}
+        aria-hidden={!mobileOpen}
         className={cn(
-          'bg-background/98 fixed inset-0 z-40 backdrop-blur-2xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] lg:pointer-events-none lg:hidden',
+          'bg-background/98 fixed inset-0 z-40 overflow-x-hidden overflow-y-auto backdrop-blur-2xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] lg:pointer-events-none lg:hidden',
           mobileOpen
             ? 'pointer-events-auto opacity-100'
             : 'pointer-events-none opacity-0'
         )}
       >
-        <div className='flex h-full flex-col justify-between px-8 pt-20 pb-10'>
+        <div className='flex min-h-full flex-col justify-between px-8 pt-20 pb-10'>
           <nav className='flex flex-col gap-1'>
             {links.map((link, i) => {
-              const isActive = pathname === link.href
+              const isActive =
+                pathname === link.href ||
+                (link.href !== '/' && pathname.startsWith(`${link.href}/`))
               const linkClassName = cn(
                 'flex items-center gap-3 py-3 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
                 mobileOpen
@@ -395,6 +433,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                 <Link
                   key={`${link.title}:${link.href}`}
                   to={link.href}
+                  activeOptions={{ exact: link.href === '/' }}
                   disabled={link.disabled}
                   onClick={(event) => handleNavLinkClick(event, link, true)}
                   className={linkClassName}

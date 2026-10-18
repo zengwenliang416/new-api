@@ -16,8 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export { CTA } from './sections/cta'
-export { Features } from './sections/features'
-export { Hero } from './sections/hero'
-export { HowItWorks } from './sections/how-it-works'
-export { Stats } from './sections/stats'
+export { BoundariesSection } from './boundaries-section'
+export { BrandReveal } from './brand-reveal'
+export { CtaSection } from './cta-section'
+export { HeroSection } from './hero-section'
+export { RequestFlowSection } from './request-flow-section'
+export { RulesSection } from './rules-section'
+export { Statement } from './statement'
