@@ -49,7 +49,9 @@ import {
 import type { AdminUserManageAction } from '@/features/auth/secure-verification'
 import { UserSubscriptionsDialog } from '@/features/subscriptions/components/dialogs/user-subscriptions-dialog'
 import { handleServerError } from '@/lib/handle-server-error'
+import { ROLE } from '@/lib/roles'
 import { AuthOperationError } from '@/lib/secure-verification'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { manageUser, resetUserPasskey, resetUserTwoFA } from '../api'
 import {
@@ -67,6 +69,7 @@ const MANAGE_ACTION_TITLES: Record<AdminUserManageAction, string> = {
   disable: 'Verify to disable user',
   enable: 'Verify to enable user',
   promote: 'Verify to promote user',
+  promote_support: 'Verify to promote user to support staff',
   demote: 'Verify to demote user',
 }
 
@@ -77,6 +80,7 @@ interface DataTableRowActionsProps {
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t } = useTranslation()
   const user = row.original
+  const viewerRole = useAuthStore((s) => s.auth.user?.role ?? ROLE.GUEST)
   const {
     setOpen,
     setCurrentRow,
@@ -187,8 +191,15 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const isDisabled = user.status === USER_STATUS.DISABLED
   const isAdmin = user.role >= USER_ROLE.ADMIN
   const isRoot = user.role === USER_ROLE.ROOT
+  const isSupport = user.role === USER_ROLE.SUPPORT
 
   if (isUserDeleted(user)) {
+    return null
+  }
+
+  // Support staff have read-only access to the user list; every user
+  // mutation endpoint requires at least the admin role.
+  if (viewerRole < ROLE.ADMIN) {
     return null
   }
 
@@ -233,7 +244,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuItem>
         )}
 
-        {isAdmin && !isRoot && (
+        {((isAdmin && !isRoot) || isSupport) && (
           <DropdownMenuItem onClick={() => handleManage('demote')}>
             {t('Demote')}
             <DropdownMenuShortcut>
@@ -245,6 +256,15 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         {!isAdmin && (
           <DropdownMenuItem onClick={() => handleManage('promote')}>
             {t('Promote')}
+            <DropdownMenuShortcut>
+              <ArrowUp size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+
+        {user.role === USER_ROLE.USER && (
+          <DropdownMenuItem onClick={() => handleManage('promote_support')}>
+            {t('Promote to Support Staff')}
             <DropdownMenuShortcut>
               <ArrowUp size={16} />
             </DropdownMenuShortcut>

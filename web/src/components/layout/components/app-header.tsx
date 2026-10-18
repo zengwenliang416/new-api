@@ -16,14 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useNavigate } from '@tanstack/react-router'
+
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { NotificationPopover } from '@/components/notification-popover'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { SupportNotificationTab } from '@/features/support/components/support-notification-tab'
+import { useSupportSession } from '@/features/support/hooks/use-support-session'
+import type { SupportScope } from '@/features/support/types'
 import { SystemUpdateAction } from '@/features/system-update/system-update-action'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import type { TopNavLink } from '../types'
@@ -111,6 +118,30 @@ export function AppHeader({
   // Notifications hook
   const notifications = useNotifications()
 
+  // Support Center notifications (worker session + queue summary)
+  const user = useAuthStore((state) => state.auth.user)
+  const navigate = useNavigate()
+  const supportScope: SupportScope =
+    user && Number(user.role) >= ROLE.SUPPORT ? 'admin' : 'user'
+  const support = useSupportSession(supportScope)
+  const supportAvailable = !!user && support.session != null
+
+  const openSupportTicket = (ticketId: number) => {
+    notifications.setPopoverOpen(false)
+    void navigate({
+      to: supportScope === 'admin' ? '/support-admin' : '/support',
+      search: { ticket: String(ticketId) },
+    })
+  }
+
+  const openSupportCenter = () => {
+    notifications.setPopoverOpen(false)
+    void navigate({
+      to: supportScope === 'admin' ? '/support-admin' : '/support',
+      search: {},
+    })
+  }
+
   return (
     <Header>
       <div className='@container/system-brand flex min-w-0 flex-1 items-center gap-1'>
@@ -136,12 +167,29 @@ export function AppHeader({
             <NotificationPopover
               open={notifications.popoverOpen}
               onOpenChange={notifications.setPopoverOpen}
-              unreadCount={notifications.unreadCount}
+              unreadCount={notifications.unreadCount + support.unreadCount}
               activeTab={notifications.activeTab}
               onTabChange={notifications.setActiveTab}
               notice={notifications.notice}
               announcements={notifications.announcements}
               loading={notifications.loading}
+              supportTab={
+                supportAvailable
+                  ? {
+                      unreadCount: support.unreadCount,
+                      content: (
+                        <SupportNotificationTab
+                          scope={supportScope}
+                          tickets={support.latestAttention}
+                          loading={support.isLoading}
+                          error={support.error}
+                          onSelectTicket={openSupportTicket}
+                          onViewAll={openSupportCenter}
+                        />
+                      ),
+                    }
+                  : undefined
+              }
             />
           )}
           <LanguageSwitcher />

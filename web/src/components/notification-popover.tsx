@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
-import { Bell, Megaphone } from 'lucide-react'
+import { Bell, LifeBuoy, Megaphone } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { RichContent } from '@/components/rich-content'
@@ -52,15 +52,23 @@ interface AnnouncementItem {
   publishDate?: string | Date
 }
 
+export type NotificationTab = 'notice' | 'announcements' | 'support'
+
+export interface NotificationSupportTab {
+  unreadCount: number
+  content: React.ReactNode
+}
+
 interface NotificationPopoverProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   unreadCount: number
-  activeTab: 'notice' | 'announcements'
-  onTabChange: (tab: 'notice' | 'announcements') => void
+  activeTab: NotificationTab
+  onTabChange: (tab: NotificationTab) => void
   notice: string
   announcements: AnnouncementItem[]
   loading: boolean
+  supportTab?: NotificationSupportTab
   className?: string
 }
 
@@ -299,6 +307,7 @@ export function NotificationPopover({
   notice,
   announcements,
   loading,
+  supportTab,
   className,
 }: NotificationPopoverProps) {
   const { t } = useTranslation()
@@ -341,7 +350,11 @@ export function NotificationPopover({
           value={activeTab}
           onValueChange={onTabChange as (value: string) => void}
         >
-          <TabsList className='grid w-full grid-cols-2'>
+          <TabsList
+            className={
+              supportTab ? 'grid w-full grid-cols-3' : 'grid w-full grid-cols-2'
+            }
+          >
             <TabsTrigger value='notice' className='gap-1.5'>
               <Bell className='size-3.5' />
               {t('Notice')}
@@ -350,6 +363,22 @@ export function NotificationPopover({
               <Megaphone className='size-3.5' />
               {t('Timeline')}
             </TabsTrigger>
+            {supportTab && (
+              <TabsTrigger value='support' className='gap-1.5'>
+                <LifeBuoy className='size-3.5' />
+                {t('Support')}
+                {supportTab.unreadCount > 0 && (
+                  <Badge
+                    variant='destructive'
+                    className='flex h-4 min-w-4 items-center justify-center px-1 text-[10px] tabular-nums'
+                  >
+                    {supportTab.unreadCount > 99
+                      ? '99+'
+                      : supportTab.unreadCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value='notice' className='mt-2'>
@@ -363,6 +392,12 @@ export function NotificationPopover({
               t={t}
             />
           </TabsContent>
+
+          {supportTab && (
+            <TabsContent value='support' className='mt-2'>
+              {supportTab.content}
+            </TabsContent>
+          )}
         </Tabs>
 
         <div className='flex justify-end'>

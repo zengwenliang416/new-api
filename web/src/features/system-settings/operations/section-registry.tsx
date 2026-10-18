@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
+import { SupportWorkerSettingsSection } from '../integrations/support-worker-settings-section'
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
 import { LogSettingsSection } from '../maintenance/log-settings-section'
 import { PerformanceSection } from '../maintenance/performance-section'
@@ -88,6 +89,24 @@ const OPERATIONS_SECTIONS = [
           WorkerValidKey: settings.WorkerValidKey,
           WorkerAllowHttpImageRequestEnabled:
             settings.WorkerAllowHttpImageRequestEnabled,
+        }}
+      />
+    ),
+  },
+  {
+    id: 'support-worker',
+    titleKey: 'Support Worker',
+    build: (settings: OperationsSettings) => (
+      <SupportWorkerSettingsSection
+        defaultValues={{
+          SupportWorkerUrl: settings.SupportWorkerUrl,
+          SupportWorkerJwtSecret: '',
+          SupportWorkerCallbackSecret: '',
+          SupportWorkerSiteID: settings.SupportWorkerSiteID,
+          SupportWorkerSessionTTLMinutes:
+            settings.SupportWorkerSessionTTLMinutes,
+          SupportWorkerTranslationEnabled:
+            settings.SupportWorkerTranslationEnabled,
         }}
       />
     ),

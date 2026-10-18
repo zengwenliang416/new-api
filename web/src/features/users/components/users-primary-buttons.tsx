@@ -20,16 +20,24 @@ import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { useUsers } from './users-provider'
 
 export function UsersPrimaryButtons() {
   const { t } = useTranslation()
+  const role = useAuthStore((s) => s.auth.user?.role ?? ROLE.GUEST)
   const { setOpen, setCurrentRow } = useUsers()
 
   const handleCreate = () => {
     setCurrentRow(null)
     setOpen('create')
+  }
+
+  // Support staff have read-only access to the user list.
+  if (role < ROLE.ADMIN) {
+    return null
   }
 
   return (

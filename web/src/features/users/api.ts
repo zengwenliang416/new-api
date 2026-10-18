@@ -104,7 +104,7 @@ export async function getUser(id: number): Promise<ApiResponse<User>> {
 }
 
 /**
- * Create a new user. Creating an administrator requires an
+ * Create a new user. Creating support staff or an administrator requires an
  * `admin.user.create` proof.
  */
 export async function createUser(

@@ -201,8 +201,8 @@ export function UsersMutateDrawer({
       ) {
         delete payload.admin_permissions
       }
-      // Resetting a password, rewriting admin permissions, or creating an
-      // administrator changes who can sign in or what they may do.
+      // Resetting a password, rewriting admin permissions, or creating a
+      // privileged account changes who can sign in or what they may do.
       let proofToken: string | undefined
       if (isUpdate && currentRow) {
         if (payload.password || payload.admin_permissions) {
@@ -218,13 +218,13 @@ export function UsersMutateDrawer({
           if (!proof) return
           proofToken = proof.proof_token
         }
-      } else if ((payload.role ?? 0) >= ROLE.ADMIN) {
+      } else if ((payload.role ?? 0) >= ROLE.SUPPORT) {
         const proof = await requestVerification({
           scope: 'admin.user.create',
-          context: { role: payload.role ?? ROLE.ADMIN },
-          title: t('Verify to create administrator'),
+          context: { role: payload.role ?? ROLE.SUPPORT },
+          title: t('Verify to create a privileged account'),
           description: t(
-            'Confirm your identity before creating an administrator account.'
+            'Confirm your identity before creating a support or administrator account.'
           ),
         })
         if (!proof) return
@@ -336,6 +336,7 @@ export function UsersMutateDrawer({
                         <Select
                           items={[
                             { value: '1', label: t('Common User') },
+                            { value: '5', label: t('Support Staff') },
                             { value: '10', label: t('Admin') },
                           ]}
                           onValueChange={(value) =>
@@ -353,6 +354,9 @@ export function UsersMutateDrawer({
                             <SelectGroup>
                               <SelectItem value='1'>
                                 {t('Common User')}
+                              </SelectItem>
+                              <SelectItem value='5'>
+                                {t('Support Staff')}
                               </SelectItem>
                               <SelectItem value='10'>{t('Admin')}</SelectItem>
                             </SelectGroup>

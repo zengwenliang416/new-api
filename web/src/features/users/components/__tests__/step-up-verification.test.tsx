@@ -24,10 +24,13 @@ import { useEffect } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
 import type { User } from '../../types'
 import { DataTableRowActions } from '../data-table-row-actions'
 import { UsersDeleteDialog } from '../users-delete-dialog'
+import { UsersMutateDrawer } from '../users-mutate-drawer'
 import { UsersProvider, useUsers } from '../users-provider'
 
 const target: User = {
@@ -102,9 +105,22 @@ async function completeTwoFactorVerification() {
   await userEvent.click(screen.getByRole('button', { name: 'Verify' }))
 }
 
+async function fillNewUser(roleLabel = 'Common User') {
+  await userEvent.type(await screen.findByLabelText('Username'), 'created-user')
+  await userEvent.type(screen.getByLabelText('Password'), 'FixturePassword!')
+  if (roleLabel !== 'Common User') {
+    await userEvent.click(screen.getByRole('combobox', { name: 'Role' }))
+    await userEvent.click(
+      await screen.findByRole('option', { name: roleLabel })
+    )
+  }
+  await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  useAuthStore.getState().auth.reset()
 })
 
 it('deleting a user sends the request only with a single-use proof for that user', async () => {
@@ -160,6 +176,11 @@ it('cancelling verification leaves the user untouched and returns to the confirm
 })
 
 it('disabling a user from the row menu binds the proof to the user and action', async () => {
+  useAuthStore.getState().auth.setUser({
+    id: 1,
+    username: 'admin',
+    role: ROLE.ADMIN,
+  })
   const proof = mockVerification('admin.user.manage', 'manage-proof')
   const post = vi.spyOn(api, 'post').mockImplementation(async (url) => {
     if (url === '/api/verify') return proof
@@ -197,4 +218,104 @@ it('disabling a user from the row menu binds the proof to the user and action', 
     }),
     expect.anything()
   )
+})
+
+it('cancelling verification for a new support account does not create the account', async () => {
+  useAuthStore.getState().auth.setUser({
+    id: 1,
+    username: 'root',
+    role: ROLE.SUPER_ADMIN,
+  })
+  mockVerification('admin.user.create', 'support-create-proof')
+  const post = vi
+    .spyOn(api, 'post')
+    .mockResolvedValue({ data: { success: true } })
+  const onOpenChange = vi.fn()
+  renderInProvider(<UsersMutateDrawer open onOpenChange={onOpenChange} />)
+  await fillNewUser('Support Staff')
+  expect(post).not.toHaveBeenCalled()
+  await screen.findByLabelText('Authenticator code or backup code')
+
+  await userEvent.keyboard('{Escape}')
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+  )
+
+  expect(post).not.toHaveBeenCalled()
+  expect(onOpenChange).not.toHaveBeenCalled()
+})
+
+it('creating a support account waits for a proof bound to role 5 and sends it once', async () => {
+  useAuthStore.getState().auth.setUser({
+    id: 1,
+    username: 'root',
+    role: ROLE.SUPER_ADMIN,
+  })
+  const proof = mockVerification('admin.user.create', 'support-create-proof')
+  const post = vi.spyOn(api, 'post').mockImplementation(async (url) => {
+    if (url === '/api/verify') return proof
+    if (url === '/api/user/') return { data: { success: true } }
+    throw new Error(`Unexpected POST ${url}`)
+  })
+  const onOpenChange = vi.fn()
+  renderInProvider(<UsersMutateDrawer open onOpenChange={onOpenChange} />)
+  await fillNewUser('Support Staff')
+  expect(post).not.toHaveBeenCalled()
+  await screen.findByRole('heading', {
+    name: 'Verify to create a privileged account',
+  })
+
+  await completeTwoFactorVerification()
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledWith(
+      '/api/user/',
+      expect.objectContaining({ role: ROLE.SUPPORT, username: 'created-user' }),
+      expect.objectContaining({
+        headers: { 'X-Security-Proof': 'support-create-proof' },
+        singleUseAuthorization: true,
+      })
+    )
+  )
+
+  expect(post).toHaveBeenCalledWith(
+    '/api/verify',
+    expect.objectContaining({
+      scope: 'admin.user.create',
+      context: { role: ROLE.SUPPORT },
+    }),
+    expect.anything()
+  )
+  expect(post.mock.calls.filter(([url]) => url === '/api/user/')).toHaveLength(
+    1
+  )
+  expect(onOpenChange).toHaveBeenCalledWith(false)
+})
+
+it('creating a common user does not request a security proof', async () => {
+  useAuthStore.getState().auth.setUser({
+    id: 1,
+    username: 'root',
+    role: ROLE.SUPER_ADMIN,
+  })
+  mockVerification('admin.user.create', 'unused-proof')
+  const get = vi.mocked(api.get)
+  const post = vi
+    .spyOn(api, 'post')
+    .mockResolvedValue({ data: { success: true } })
+  renderInProvider(<UsersMutateDrawer open onOpenChange={vi.fn()} />)
+  await fillNewUser()
+
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledExactlyOnceWith(
+      '/api/user/',
+      expect.objectContaining({ role: ROLE.USER, username: 'created-user' }),
+      {}
+    )
+  )
+  expect(get.mock.calls.some(([url]) => url === '/api/verify/methods')).toBe(
+    false
+  )
+  expect(
+    screen.queryByLabelText('Authenticator code or backup code')
+  ).not.toBeInTheDocument()
 })
