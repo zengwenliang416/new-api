@@ -154,6 +154,7 @@ function ChatRouteComponent() {
   }
 
   return (
+    // eslint-disable-next-line react/iframe-missing-sandbox -- Preserve the configured chat provider origin and storage contract; sandbox changes require provider regression coverage.
     <iframe
       src={iframeSrc}
       key={iframeSrc}
