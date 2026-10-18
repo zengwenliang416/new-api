@@ -65,6 +65,7 @@ type textQuotaSummary struct {
 	ToolSurchargeItems     []ToolSurchargeItem
 	ToolCallSurchargeQuota decimal.Decimal
 	FixedPriceBilling      bool
+	PerformanceInput       relaycommon.PerformanceInputObservation
 }
 
 // hasBillableUsage reports whether this request should incur any charge.
@@ -343,6 +344,21 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		}
 
 		promptQuota := baseTokens.Add(cachedTokensWithRatio).Add(imageTokensWithRatio).Add(cachedCreationTokensWithRatio)
+		// Observe the same input-price component used below; do not reconstruct
+		// it from the rounded total, which also includes output and tool charges.
+		// Expressions, multimedia and inferred OpenRouter usage have no supported
+		// input-only counterfactual and deliberately lower observation coverage.
+		if relayInfo.TieredBillingSnapshot == nil && !isOpenRouterClaudeBilling &&
+			summary.ImageTokens == 0 && summary.AudioTokens == 0 &&
+			dQuotaPerUnit.IsPositive() {
+			readableTokens := baseTokens.Add(dCacheTokens)
+			summary.PerformanceInput = relaycommon.PerformanceInputObservation{
+				CostObserved: true,
+				InputCost:    relayInfo.PriceData.ApplyOtherRatiosToDecimal(promptQuota.Mul(ratio)).Div(dQuotaPerUnit).InexactFloat64(),
+				Cache0Cost:   relayInfo.PriceData.ApplyOtherRatiosToDecimal(readableTokens.Add(cachedCreationTokensWithRatio).Mul(dModelRatio)).Div(dQuotaPerUnit).InexactFloat64(),
+				Cache100Cost: relayInfo.PriceData.ApplyOtherRatiosToDecimal(readableTokens.Mul(dCacheRatio).Add(cachedCreationTokensWithRatio).Mul(dModelRatio)).Div(dQuotaPerUnit).InexactFloat64(),
+			}
+		}
 		completionQuota := dCompletionTokens.Mul(dCompletionRatio)
 		quotaCalculateDecimal := promptQuota.Add(completionQuota).Mul(ratio)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(audioInputQuota)
@@ -451,8 +467,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, summary.Quota)
 	}
 
-	if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
-		logger.LogError(ctx, "error settling billing: "+err.Error())
+	settleErr := SettleBilling(ctx, relayInfo, summary.Quota)
+	if settleErr != nil {
+		logger.LogError(ctx, "error settling billing: "+settleErr.Error())
 	}
 
 	logModel := summary.ModelName
@@ -542,4 +559,56 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Other:            other,
 	})
 	relayInfo.PerformanceOutputTokens = int64(summary.CompletionTokens)
+	observeTextPerformance(ctx, relayInfo, originUsage, billingUsage, summary, settleErr == nil)
+}
+
+// observeTextPerformance retains only reported upstream input usage. An omitted
+// cache count in otherwise valid upstream usage is zero; missing or estimated
+// usage is unknown and must not dilute the observed cache rate.
+func observeTextPerformance(ctx *gin.Context, info *relaycommon.RelayInfo, original, usage *dto.Usage, summary textQuotaSummary, settled bool) {
+	info.PerformanceInput = relaycommon.PerformanceInputObservation{}
+	if original == nil || usage == nil ||
+		(original.BillingUsage != nil && original.BillingUsage.Estimated) ||
+		(common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens) && original.BillingUsage == nil) {
+		return
+	}
+	input := int64(summary.PromptTokens)
+	cache := int64(summary.CacheTokens)
+	write := int64(cacheWriteTokensTotal(summary))
+	if input < 0 || cache < 0 || write < 0 ||
+		input > math.MaxInt32 || cache > math.MaxInt32 || write > math.MaxInt32 {
+		return
+	}
+	if summary.IsClaudeUsageSemantic || isLegacyClaudeDerivedOpenAIUsage(info, usage) {
+		input += cache + write
+	}
+	if input <= 0 || input > math.MaxInt32 || cache > input {
+		return
+	}
+	observation := summary.PerformanceInput
+	observation.InputTokens, observation.CachedTokens = input, cache
+	// These explicit product tokens are self-reported telemetry only. Unknown
+	// agents remain outside the Coding subset; model names are never evidence.
+	if ctx != nil && ctx.Request != nil {
+		ua := strings.ToLower(ctx.Request.UserAgent())
+		for _, product := range []string{"codex_cli_rs/", "codex-cli/", "codex/", "claude-cli/", "opencode/"} {
+			if strings.HasPrefix(ua, product) {
+				observation.Coding = true
+				break
+			}
+		}
+	}
+	if !settled || info.QuotaClamp != nil || cache+write > input ||
+		info.TieredBillingSnapshot != nil || info.PriceData.UsePrice {
+		observation.CostObserved = false
+	}
+	for _, cost := range []float64{observation.InputCost, observation.Cache0Cost, observation.Cache100Cost} {
+		if cost < 0 || math.IsNaN(cost) || math.IsInf(cost, 0) {
+			observation.CostObserved = false
+		}
+	}
+	if !observation.CostObserved {
+		observation.InputCost, observation.Cache0Cost, observation.Cache100Cost = 0, 0, 0
+	}
+	info.PerformanceInput = observation
 }

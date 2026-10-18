@@ -1,6 +1,11 @@
 package perfmetrics
 
-import "sync/atomic"
+import (
+	"math"
+	"sync"
+
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+)
 
 type Store interface {
 	Record(sample Sample)
@@ -16,6 +21,7 @@ type Sample struct {
 	Success      bool
 	OutputTokens int64
 	GenerationMs int64
+	Input        relaycommon.PerformanceInputObservation
 }
 
 type QueryParams struct {
@@ -89,87 +95,111 @@ type bucketKey struct {
 }
 
 type counters struct {
-	requestCount   int64
-	successCount   int64
-	totalLatencyMs int64
-	ttftSumMs      int64
-	ttftCount      int64
-	outputTokens   int64
-	generationMs   int64
+	requestCount            int64
+	successCount            int64
+	totalLatencyMs          int64
+	ttftSumMs               int64
+	ttftCount               int64
+	outputTokens            int64
+	generationMs            int64
+	inputTokens             int64
+	cachedInputTokens       int64
+	codingInputTokens       int64
+	codingCachedInputTokens int64
+	codingCostInputTokens   int64
+	codingInputCost         float64
+	codingCache0Cost        float64
+	codingCache100Cost      float64
 }
 
+// atomicBucket snapshots and drains whole samples atomically. A single lock
+// keeps fractional input costs and their token weights in the same flush.
 type atomicBucket struct {
-	requestCount   atomic.Int64
-	successCount   atomic.Int64
-	totalLatencyMs atomic.Int64
-	ttftSumMs      atomic.Int64
-	ttftCount      atomic.Int64
-	outputTokens   atomic.Int64
-	generationMs   atomic.Int64
+	mu    sync.Mutex
+	value counters
 }
 
 func (b *atomicBucket) add(sample Sample) {
-	b.requestCount.Add(1)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.value.addSample(sample)
+}
+
+func (c *counters) addSample(sample Sample) {
+	c.requestCount++
 	if sample.Success {
-		b.successCount.Add(1)
+		c.successCount++
 	}
 	if sample.LatencyMs > 0 {
-		b.totalLatencyMs.Add(sample.LatencyMs)
+		c.totalLatencyMs += sample.LatencyMs
 	}
 	if sample.HasTtft && sample.TtftMs >= 0 {
-		b.ttftSumMs.Add(sample.TtftMs)
-		b.ttftCount.Add(1)
+		c.ttftSumMs += sample.TtftMs
+		c.ttftCount++
 	}
 	if sample.OutputTokens > 0 && sample.GenerationMs > 0 {
-		b.outputTokens.Add(sample.OutputTokens)
-		b.generationMs.Add(sample.GenerationMs)
+		c.outputTokens += sample.OutputTokens
+		c.generationMs += sample.GenerationMs
 	}
+	observation := sample.Input
+	if !sample.Success || observation.InputTokens <= 0 || observation.CachedTokens < 0 || observation.CachedTokens > observation.InputTokens {
+		return
+	}
+	c.inputTokens += observation.InputTokens
+	c.cachedInputTokens += observation.CachedTokens
+	if !observation.Coding {
+		return
+	}
+	c.codingInputTokens += observation.InputTokens
+	c.codingCachedInputTokens += observation.CachedTokens
+	if !observation.CostObserved {
+		return
+	}
+	for _, cost := range []float64{observation.InputCost, observation.Cache0Cost, observation.Cache100Cost} {
+		if cost < 0 || math.IsNaN(cost) || math.IsInf(cost, 0) {
+			return
+		}
+	}
+	c.codingCostInputTokens += observation.InputTokens
+	c.codingInputCost += observation.InputCost
+	c.codingCache0Cost += observation.Cache0Cost
+	c.codingCache100Cost += observation.Cache100Cost
 }
 
 func (b *atomicBucket) snapshot() counters {
-	return counters{
-		requestCount:   b.requestCount.Load(),
-		successCount:   b.successCount.Load(),
-		totalLatencyMs: b.totalLatencyMs.Load(),
-		ttftSumMs:      b.ttftSumMs.Load(),
-		ttftCount:      b.ttftCount.Load(),
-		outputTokens:   b.outputTokens.Load(),
-		generationMs:   b.generationMs.Load(),
-	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.value
 }
 
 func (b *atomicBucket) drain() counters {
-	return counters{
-		requestCount:   b.requestCount.Swap(0),
-		successCount:   b.successCount.Swap(0),
-		totalLatencyMs: b.totalLatencyMs.Swap(0),
-		ttftSumMs:      b.ttftSumMs.Swap(0),
-		ttftCount:      b.ttftCount.Swap(0),
-		outputTokens:   b.outputTokens.Swap(0),
-		generationMs:   b.generationMs.Swap(0),
-	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	value := b.value
+	b.value = counters{}
+	return value
 }
 
 func (b *atomicBucket) addCounters(c counters) {
-	if c.requestCount != 0 {
-		b.requestCount.Add(c.requestCount)
-	}
-	if c.successCount != 0 {
-		b.successCount.Add(c.successCount)
-	}
-	if c.totalLatencyMs != 0 {
-		b.totalLatencyMs.Add(c.totalLatencyMs)
-	}
-	if c.ttftSumMs != 0 {
-		b.ttftSumMs.Add(c.ttftSumMs)
-	}
-	if c.ttftCount != 0 {
-		b.ttftCount.Add(c.ttftCount)
-	}
-	if c.outputTokens != 0 {
-		b.outputTokens.Add(c.outputTokens)
-	}
-	if c.generationMs != 0 {
-		b.generationMs.Add(c.generationMs)
-	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.value.add(c)
+}
+
+func (c *counters) add(value counters) {
+	c.requestCount += value.requestCount
+	c.successCount += value.successCount
+	c.totalLatencyMs += value.totalLatencyMs
+	c.ttftSumMs += value.ttftSumMs
+	c.ttftCount += value.ttftCount
+	c.outputTokens += value.outputTokens
+	c.generationMs += value.generationMs
+	c.inputTokens += value.inputTokens
+	c.cachedInputTokens += value.cachedInputTokens
+	c.codingInputTokens += value.codingInputTokens
+	c.codingCachedInputTokens += value.codingCachedInputTokens
+	c.codingCostInputTokens += value.codingCostInputTokens
+	c.codingInputCost += value.codingInputCost
+	c.codingCache0Cost += value.codingCache0Cost
+	c.codingCache100Cost += value.codingCache100Cost
 }

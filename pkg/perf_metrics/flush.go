@@ -2,6 +2,7 @@ package perfmetrics
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -24,6 +25,8 @@ func flushLoop() {
 }
 
 func flushCompletedBuckets() {
+	bucketFlushMu.Lock()
+	defer bucketFlushMu.Unlock()
 	currentBucket := bucketStart(time.Now().Unix())
 	hotBuckets.Range(func(key, value any) bool {
 		k := key.(bucketKey)
@@ -39,16 +42,24 @@ func flushCompletedBuckets() {
 		}
 
 		err := model.UpsertPerfMetric(&model.PerfMetric{
-			ModelName:      k.model,
-			Group:          k.group,
-			BucketTs:       k.bucketTs,
-			RequestCount:   drained.requestCount,
-			SuccessCount:   drained.successCount,
-			TotalLatencyMs: drained.totalLatencyMs,
-			TtftSumMs:      drained.ttftSumMs,
-			TtftCount:      drained.ttftCount,
-			OutputTokens:   drained.outputTokens,
-			GenerationMs:   drained.generationMs,
+			ModelName:               k.model,
+			Group:                   k.group,
+			BucketTs:                k.bucketTs,
+			RequestCount:            drained.requestCount,
+			SuccessCount:            drained.successCount,
+			TotalLatencyMs:          drained.totalLatencyMs,
+			TtftSumMs:               drained.ttftSumMs,
+			TtftCount:               drained.ttftCount,
+			OutputTokens:            drained.outputTokens,
+			GenerationMs:            drained.generationMs,
+			InputTokens:             drained.inputTokens,
+			CachedInputTokens:       drained.cachedInputTokens,
+			CodingInputTokens:       drained.codingInputTokens,
+			CodingCachedInputTokens: drained.codingCachedInputTokens,
+			CodingCostInputTokens:   drained.codingCostInputTokens,
+			CodingInputCost:         drained.codingInputCost,
+			CodingCache0Cost:        drained.codingCache0Cost,
+			CodingCache100Cost:      drained.codingCache100Cost,
 		})
 		if err != nil {
 			bucket.addCounters(drained)
@@ -79,13 +90,21 @@ func cleanupExpiredMetrics(retentionDays int) {
 
 func redisCounters(values map[string]string) counters {
 	return counters{
-		requestCount:   parseRedisInt(values["req"]),
-		successCount:   parseRedisInt(values["ok"]),
-		totalLatencyMs: parseRedisInt(values["lat"]),
-		ttftSumMs:      parseRedisInt(values["ttft"]),
-		ttftCount:      parseRedisInt(values["ttft_n"]),
-		outputTokens:   parseRedisInt(values["out"]),
-		generationMs:   parseRedisInt(values["gen_ms"]),
+		requestCount:            parseRedisInt(values["req"]),
+		successCount:            parseRedisInt(values["ok"]),
+		totalLatencyMs:          parseRedisInt(values["lat"]),
+		ttftSumMs:               parseRedisInt(values["ttft"]),
+		ttftCount:               parseRedisInt(values["ttft_n"]),
+		outputTokens:            parseRedisInt(values["out"]),
+		generationMs:            parseRedisInt(values["gen_ms"]),
+		inputTokens:             parseRedisInt(values["input_tokens"]),
+		cachedInputTokens:       parseRedisInt(values["cached_input_tokens"]),
+		codingInputTokens:       parseRedisInt(values["coding_input_tokens"]),
+		codingCachedInputTokens: parseRedisInt(values["coding_cached_input_tokens"]),
+		codingCostInputTokens:   parseRedisInt(values["coding_cost_input_tokens"]),
+		codingInputCost:         parseRedisFloat(values["coding_input_cost"]),
+		codingCache0Cost:        parseRedisFloat(values["coding_cache0_cost"]),
+		codingCache100Cost:      parseRedisFloat(values["coding_cache100_cost"]),
 	}
 }
 
@@ -94,5 +113,13 @@ func parseRedisInt(value string) int64 {
 		return 0
 	}
 	parsed, _ := strconv.ParseInt(value, 10, 64)
+	return parsed
+}
+
+func parseRedisFloat(value string) float64 {
+	parsed, _ := strconv.ParseFloat(value, 64)
+	if math.IsNaN(parsed) || math.IsInf(parsed, 0) || parsed < 0 {
+		return 0
+	}
 	return parsed
 }

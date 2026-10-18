@@ -211,6 +211,7 @@ type RelayInfo struct {
 	// the request boundary, independently of billing success or failure.
 	PerformanceOutputTokens      int64
 	PerformanceBusinessRejection bool
+	PerformanceInput             PerformanceInputObservation
 
 	// convOptions caches the converter settings snapshot (see ConvOptions).
 	convOptions *convmeta.Options
@@ -229,6 +230,19 @@ type RelayInfo struct {
 	*ResponsesUsageInfo
 	*ChannelMeta
 	*TaskRelayInfo
+}
+
+// PerformanceInputObservation contains upstream usage and the input-only,
+// pre-rounding price decomposition captured during settlement. It is telemetry,
+// never an input to billing or an assertion of a client's authenticated identity.
+type PerformanceInputObservation struct {
+	InputTokens  int64
+	CachedTokens int64
+	Coding       bool
+	CostObserved bool
+	InputCost    float64 // USD, including the settled group and request ratios.
+	Cache0Cost   float64 // USD, before the group ratio, retaining cache-write cost.
+	Cache100Cost float64 // USD, before the group ratio, retaining cache-write cost.
 }
 
 // UpdateImageCount replaces the billable quantity without changing the frozen

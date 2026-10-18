@@ -20,6 +20,10 @@ import (
 
 var hotBuckets sync.Map
 
+// bucketFlushMu keeps database reads and hot snapshots on the same side of a
+// flush, so the counters being moved cannot be missed or counted twice.
+var bucketFlushMu sync.RWMutex
+
 // seriesSchema is a stable client cache/schema marker. Do not change it when
 // hiding fields or making response-only privacy hardening changes.
 const seriesSchema = "dbcd0a3c01b55203"
@@ -61,6 +65,7 @@ func RecordRelayResult(ctx context.Context, info *relaycommon.RelayInfo, apiErr 
 		Success:      outcome == OutcomeSuccess,
 		OutputTokens: info.PerformanceOutputTokens,
 		GenerationMs: generationMs,
+		Input:        info.PerformanceInput,
 	})
 }
 
@@ -135,6 +140,8 @@ func queryWindow(now time.Time, hours int) (int64, int64) {
 }
 
 func Query(params QueryParams) (QueryResult, error) {
+	bucketFlushMu.RLock()
+	defer bucketFlushMu.RUnlock()
 	startTs, endTs := queryWindow(time.Now(), params.Hours)
 	allowedGroups := allowedGroupSet(params.AllowedGroups)
 
@@ -154,13 +161,21 @@ func Query(params QueryParams) (QueryResult, error) {
 			group:    row.Group,
 			bucketTs: row.BucketTs,
 		}, counters{
-			requestCount:   row.RequestCount,
-			successCount:   row.SuccessCount,
-			totalLatencyMs: row.TotalLatencyMs,
-			ttftSumMs:      row.TtftSumMs,
-			ttftCount:      row.TtftCount,
-			outputTokens:   row.OutputTokens,
-			generationMs:   row.GenerationMs,
+			requestCount:            row.RequestCount,
+			successCount:            row.SuccessCount,
+			totalLatencyMs:          row.TotalLatencyMs,
+			ttftSumMs:               row.TtftSumMs,
+			ttftCount:               row.TtftCount,
+			outputTokens:            row.OutputTokens,
+			generationMs:            row.GenerationMs,
+			inputTokens:             row.InputTokens,
+			cachedInputTokens:       row.CachedInputTokens,
+			codingInputTokens:       row.CodingInputTokens,
+			codingCachedInputTokens: row.CodingCachedInputTokens,
+			codingCostInputTokens:   row.CodingCostInputTokens,
+			codingInputCost:         row.CodingInputCost,
+			codingCache0Cost:        row.CodingCache0Cost,
+			codingCache100Cost:      row.CodingCache100Cost,
 		})
 	}
 
@@ -187,6 +202,8 @@ func Query(params QueryParams) (QueryResult, error) {
 }
 
 func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
+	bucketFlushMu.RLock()
+	defer bucketFlushMu.RUnlock()
 	startTs, endTs := queryWindow(time.Now(), hours)
 	allowedGroups := allowedGroupSet(groups)
 
@@ -266,13 +283,7 @@ func mergeModelTotals(totals map[string]counters, modelName string, value counte
 		return
 	}
 	current := totals[modelName]
-	current.requestCount += value.requestCount
-	current.successCount += value.successCount
-	current.totalLatencyMs += value.totalLatencyMs
-	current.ttftSumMs += value.ttftSumMs
-	current.ttftCount += value.ttftCount
-	current.outputTokens += value.outputTokens
-	current.generationMs += value.generationMs
+	current.add(value)
 	totals[modelName] = current
 }
 
@@ -284,13 +295,7 @@ func mergeModelBucket(modelBuckets map[string]map[int64]counters, modelName stri
 		modelBuckets[modelName] = map[int64]counters{}
 	}
 	current := modelBuckets[modelName][bucketTs]
-	current.requestCount += value.requestCount
-	current.successCount += value.successCount
-	current.totalLatencyMs += value.totalLatencyMs
-	current.ttftSumMs += value.ttftSumMs
-	current.ttftCount += value.ttftCount
-	current.outputTokens += value.outputTokens
-	current.generationMs += value.generationMs
+	current.add(value)
 	modelBuckets[modelName][bucketTs] = current
 }
 
@@ -353,13 +358,7 @@ func mergeCounters(merged map[bucketKey]counters, key bucketKey, value counters)
 		return
 	}
 	current := merged[key]
-	current.requestCount += value.requestCount
-	current.successCount += value.successCount
-	current.totalLatencyMs += value.totalLatencyMs
-	current.ttftSumMs += value.ttftSumMs
-	current.ttftCount += value.ttftCount
-	current.outputTokens += value.outputTokens
-	current.generationMs += value.generationMs
+	current.add(value)
 	merged[key] = current
 }
 
@@ -509,6 +508,16 @@ func recordRedis(key bucketKey, sample Sample) {
 		pipe.HIncrBy(ctx, redisKey, "out", sample.OutputTokens)
 		pipe.HIncrBy(ctx, redisKey, "gen_ms", sample.GenerationMs)
 	}
+	var observed counters
+	observed.addSample(sample)
+	pipe.HIncrBy(ctx, redisKey, "input_tokens", observed.inputTokens)
+	pipe.HIncrBy(ctx, redisKey, "cached_input_tokens", observed.cachedInputTokens)
+	pipe.HIncrBy(ctx, redisKey, "coding_input_tokens", observed.codingInputTokens)
+	pipe.HIncrBy(ctx, redisKey, "coding_cached_input_tokens", observed.codingCachedInputTokens)
+	pipe.HIncrBy(ctx, redisKey, "coding_cost_input_tokens", observed.codingCostInputTokens)
+	pipe.HIncrByFloat(ctx, redisKey, "coding_input_cost", observed.codingInputCost)
+	pipe.HIncrByFloat(ctx, redisKey, "coding_cache0_cost", observed.codingCache0Cost)
+	pipe.HIncrByFloat(ctx, redisKey, "coding_cache100_cost", observed.codingCache100Cost)
 	pipe.Expire(ctx, redisKey, time.Hour)
 	_, _ = pipe.Exec(ctx)
 }

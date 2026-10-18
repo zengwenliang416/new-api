@@ -1515,3 +1515,84 @@ func TestAppendToolSurchargeLogInfoWritesOnlyStructuredFields(t *testing.T) {
 	assert.NotContains(t, fields, "image_generation_call")
 	assert.NotContains(t, fields, "image_generation_call_price")
 }
+
+func TestTextPerformanceObservesReportedInputWithoutChangingBilling(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		mutate     func(*gin.Context, *relaycommon.RelayInfo, *dto.Usage)
+		settled    bool
+		wantInput  int64
+		wantCoding bool
+		wantCost   bool
+	}{
+		{name: "openai input decomposition", settled: true, wantInput: 1000, wantCoding: true, wantCost: true},
+		{name: "anthropic excludes cache from prompt", settled: true, wantInput: 1000, wantCoding: true, wantCost: true, mutate: func(_ *gin.Context, _ *relaycommon.RelayInfo, u *dto.Usage) {
+			u.PromptTokens = 500
+			u.UsageSemantic = "anthropic"
+		}},
+		{name: "unknown client still has cache", settled: true, wantInput: 1000, wantCost: true, mutate: func(c *gin.Context, _ *relaycommon.RelayInfo, _ *dto.Usage) {
+			c.Request.Header.Set("User-Agent", "curl/opencode/test")
+		}},
+		{name: "claude cli product", settled: true, wantInput: 1000, wantCoding: true, wantCost: true, mutate: func(c *gin.Context, _ *relaycommon.RelayInfo, _ *dto.Usage) {
+			c.Request.Header.Set("User-Agent", "claude-cli/2.0.0 (external, cli)")
+		}},
+		{name: "opencode product", settled: true, wantInput: 1000, wantCoding: true, wantCost: true, mutate: func(c *gin.Context, _ *relaycommon.RelayInfo, _ *dto.Usage) {
+			c.Request.Header.Set("User-Agent", "opencode/1.0.0")
+		}},
+		{name: "expression has no price decomposition", settled: true, wantInput: 1000, wantCoding: true, mutate: func(_ *gin.Context, i *relaycommon.RelayInfo, _ *dto.Usage) {
+			i.TieredBillingSnapshot = &billingexpr.BillingSnapshot{}
+		}},
+		{name: "fixed price has no input price", settled: true, wantInput: 1000, wantCoding: true, mutate: func(_ *gin.Context, i *relaycommon.RelayInfo, _ *dto.Usage) {
+			i.PriceData.UsePrice = true
+			i.PriceData.ModelPrice = 0.01
+		}},
+		{name: "multimedia input has no price decomposition", settled: true, wantInput: 1000, wantCoding: true, mutate: func(_ *gin.Context, _ *relaycommon.RelayInfo, u *dto.Usage) { u.PromptTokensDetails.ImageTokens = 100 }},
+		{name: "failed settlement retains cache only", wantInput: 1000, wantCoding: true},
+		{name: "estimated usage is unknown", settled: true, mutate: func(_ *gin.Context, _ *relaycommon.RelayInfo, u *dto.Usage) {
+			u.BillingUsage = &dto.BillingUsage{Estimated: true}
+		}},
+		{name: "local counts are unknown", settled: true, mutate: func(c *gin.Context, _ *relaycommon.RelayInfo, _ *dto.Usage) {
+			common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
+		}},
+		{name: "cache exceeding total is unknown", settled: true, mutate: func(_ *gin.Context, _ *relaycommon.RelayInfo, u *dto.Usage) {
+			u.PromptTokensDetails.CachedTokens = 1001
+		}},
+		{name: "overlapping writes retain cache but no cost", settled: true, wantInput: 1000, wantCoding: true, mutate: func(_ *gin.Context, _ *relaycommon.RelayInfo, u *dto.Usage) {
+			u.PromptTokensDetails.CachedCreationTokens = 700
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+			ctx.Request.Header.Set("User-Agent", "codex_cli_rs/1.0.0")
+			info := &relaycommon.RelayInfo{PriceData: hosttypes.PriceData{
+				ModelRatio: 1, CompletionRatio: 2, CacheRatio: 0.1, CacheCreationRatio: 1.25,
+				GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: 2},
+			}}
+			info.PriceData.AddOtherRatio("request", 3)
+			usage := &dto.Usage{PromptTokens: 1000, CompletionTokens: 100, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 400, CachedCreationTokens: 100}}
+			if tc.mutate != nil {
+				tc.mutate(ctx, info, usage)
+			}
+			summary := calculateTextQuotaSummary(ctx, info, usage)
+			quota := summary.Quota
+			observeTextPerformance(ctx, info, usage, usage, summary, tc.settled)
+			assert.Equal(t, quota, summary.Quota)
+			assert.Equal(t, tc.wantInput, info.PerformanceInput.InputTokens)
+			assert.Equal(t, tc.wantCoding, info.PerformanceInput.Coding)
+			assert.Equal(t, tc.wantCost, info.PerformanceInput.CostObserved)
+			if tc.wantCost {
+				assert.Equal(t, 5190, quota)
+				assert.Equal(t, int64(400), info.PerformanceInput.CachedTokens)
+				assert.InDelta(t, 0.00798, info.PerformanceInput.InputCost, 1e-12)
+				assert.InDelta(t, 0.00615, info.PerformanceInput.Cache0Cost, 1e-12)
+				assert.InDelta(t, 0.00129, info.PerformanceInput.Cache100Cost, 1e-12)
+			} else {
+				assert.Zero(t, info.PerformanceInput.InputCost)
+			}
+			// A reused relay cannot retain an observation when usage goes missing.
+			observeTextPerformance(ctx, info, nil, nil, summary, true)
+			assert.Equal(t, relaycommon.PerformanceInputObservation{}, info.PerformanceInput)
+		})
+	}
+}
