@@ -1,14 +1,19 @@
 package common
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/smtp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const smtpSessionTimeout = 30 * time.Second
 
 func generateMessageID() (string, error) {
 	split := strings.Split(SMTPFrom, "@")
@@ -41,41 +46,77 @@ func smtpTLSConfig() *tls.Config {
 	}
 }
 
-func newSMTPClient(addr string) (*smtp.Client, error) {
-	if SMTPSSLEnabled || (SMTPPort == 465 && !SMTPStartTLSEnabled) {
-		conn, err := tls.Dial("tcp", addr, smtpTLSConfig())
-		if err != nil {
-			return nil, err
-		}
-		client, err := smtp.NewClient(conn, SMTPServer)
-		if err != nil {
-			_ = conn.Close()
-			return nil, err
-		}
-		return client, nil
+func newSMTPClient(ctx context.Context, addr string) (*smtp.Client, func(), error) {
+	deadline := time.Now().Add(smtpSessionTimeout)
+	if contextDeadline, ok := ctx.Deadline(); ok && contextDeadline.Before(deadline) {
+		deadline = contextDeadline
 	}
-
-	client, err := smtp.Dial(addr)
+	dialer := net.Dialer{Timeout: smtpSessionTimeout, Deadline: deadline}
+	rawConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	stopCancel := context.AfterFunc(ctx, func() { _ = rawConn.Close() })
+	cleanup := func() {
+		stopCancel()
+		_ = rawConn.Close()
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			cleanup()
+		}
+	}()
+	// The deadline covers the greeting, TLS handshake, authentication and DATA/QUIT,
+	// rather than restarting the timeout for each SMTP command.
+	if err := rawConn.SetDeadline(deadline); err != nil {
+		return nil, nil, err
+	}
+	conn := rawConn
+	implicitTLS := SMTPSSLEnabled || (SMTPPort == 465 && !SMTPStartTLSEnabled)
+	if implicitTLS {
+		tlsConn := tls.Client(rawConn, smtpTLSConfig())
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			return nil, nil, err
+		}
+		conn = tlsConn
+	}
+	client, err := smtp.NewClient(conn, SMTPServer)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if SMTPStartTLSEnabled {
+	if SMTPStartTLSEnabled && !implicitTLS {
 		startTLSSupported, _ := client.Extension("STARTTLS")
 		if !startTLSSupported {
-			_ = client.Close()
-			return nil, fmt.Errorf("SMTP server does not support STARTTLS")
+			return nil, nil, fmt.Errorf("SMTP server does not support STARTTLS")
 		}
 		if err := client.StartTLS(smtpTLSConfig()); err != nil {
-			_ = client.Close()
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
-	return client, nil
+	ready = true
+	return client, cleanup, nil
 }
 
 func SendEmail(subject string, receiver string, content string) error {
+	return SendEmailContext(context.Background(), subject, receiver, content)
+}
+
+// SendEmailContext sends an email within the caller's deadline or the default
+// SMTP session limit, whichever comes first. Cancellation closes the connection.
+func SendEmailContext(ctx context.Context, subject string, receiver string, content string) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, smtpSessionTimeout)
+	defer cancel()
+	defer func() {
+		if err != nil && ctx.Err() != nil {
+			err = ctx.Err()
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if SMTPFrom == "" { // for compatibility
 		SMTPFrom = SMTPAccount
 	}
@@ -95,14 +136,13 @@ func SendEmail(subject string, receiver string, content string) error {
 		"Content-Type: text/html; charset=UTF-8\r\n\r\n%s\r\n",
 		receiver, SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, content))
 	auth := getSMTPAuth()
-	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
+	addr := net.JoinHostPort(SMTPServer, strconv.Itoa(SMTPPort))
 	to := strings.Split(receiver, ";")
-	var err error
-	client, err := newSMTPClient(addr)
+	client, cleanup, err := newSMTPClient(ctx, addr)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer cleanup()
 	if shouldAuthenticateSMTP() {
 		if err = client.Auth(auth); err != nil {
 			return err
