@@ -20,6 +20,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useStatus } from '@/hooks/use-status'
+import { normalizeBrandId } from '@/lib/brands'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -40,6 +41,7 @@ export type TopNavLink = {
  *   pricing: { enabled: true, requireAuth: false },
  *   rankings: { enabled: true, requireAuth: false },
  *   docs: true,
+ *   changelog: true,
  *   about: true
  * }
  */
@@ -57,6 +59,13 @@ export function useTopNavLinks(): TopNavLink[] {
 
   // Documentation link (may be external)
   const docsLink: string | undefined = status?.docs_link as string | undefined
+  const isPortalBrand =
+    normalizeBrandId(status?.site_brand as string | undefined) !== 'new-api'
+  const useIntegratedDocs =
+    isPortalBrand &&
+    (!docsLink ||
+      docsLink === 'https://docs.newapi.pro' ||
+      docsLink === 'https://docs.newapi.ai/')
 
   const isAuthed = !!auth?.user
 
@@ -76,23 +85,36 @@ export function useTopNavLinks(): TopNavLink[] {
   const pricing = modules?.pricing
   if (pricing && typeof pricing === 'object' && pricing.enabled) {
     const requiresAuth = pricing.requireAuth && !isAuthed
-    links.push({ title: t('Model Square'), href: '/pricing', requiresAuth })
+    links.push({
+      title: isPortalBrand ? t('Models & pricing') : t('Model Square'),
+      href: '/pricing',
+      requiresAuth,
+    })
   }
 
   // Rankings
   const rankings = modules?.rankings
   if (rankings && typeof rankings === 'object' && rankings.enabled) {
     const requiresAuth = rankings.requireAuth && !isAuthed
-    links.push({ title: t('Rankings'), href: '/rankings', requiresAuth })
+    links.push({
+      title: isPortalBrand ? t('Hot') : t('Rankings'),
+      href: '/rankings',
+      requiresAuth,
+    })
   }
 
   // Docs (supports external links)
   if (modules?.docs !== false) {
-    if (docsLink) {
+    if (docsLink && !useIntegratedDocs) {
       links.push({ title: t('Docs'), href: docsLink, external: true })
     } else {
       links.push({ title: t('Docs'), href: '/docs' })
     }
+  }
+
+  // Changelog
+  if (modules?.changelog !== false) {
+    links.push({ title: t('Changelog'), href: '/changelog' })
   }
 
   // About

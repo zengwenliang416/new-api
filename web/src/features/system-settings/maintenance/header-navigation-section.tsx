@@ -56,6 +56,7 @@ const headerNavSchema = z.object({
   rankingsEnabled: z.boolean(),
   rankingsRequireAuth: z.boolean(),
   docs: z.boolean(),
+  changelog: z.boolean(),
   about: z.boolean(),
 })
 
@@ -91,6 +92,10 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
       : Boolean(config.rankings.requireAuth),
   docs:
     config.docs === undefined ? HEADER_NAV_DEFAULT.docs : Boolean(config.docs),
+  changelog:
+    config.changelog === undefined
+      ? HEADER_NAV_DEFAULT.changelog
+      : Boolean(config.changelog),
   about:
     config.about === undefined
       ? HEADER_NAV_DEFAULT.about
@@ -120,6 +125,7 @@ export function HeaderNavigationSection({
       home: values.home,
       console: values.console,
       docs: values.docs,
+      changelog: values.changelog,
       about: values.about,
       pricing: {
         ...(config.pricing ?? HEADER_NAV_DEFAULT.pricing),
@@ -167,6 +173,11 @@ export function HeaderNavigationSection({
       key: 'docs',
       title: t('Docs'),
       description: t('Documentation or external knowledge base.'),
+    },
+    {
+      key: 'changelog',
+      title: t('Changelog'),
+      description: t('Update history and service improvements.'),
     },
     {
       key: 'about',

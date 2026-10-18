@@ -29,6 +29,7 @@ import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
+import { Route as ChangelogIndexRouteImport } from './routes/changelog/index'
 import { Route as DocsIndexRouteImport } from './routes/docs/index'
 import { Route as DocsApiRouteImport } from './routes/docs/api'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
@@ -175,6 +176,11 @@ const AuthenticatedSystemSettingsRouteRoute =
 const AboutIndexRoute = AboutIndexRouteImport.update({
   id: '/about/',
   path: '/about/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChangelogIndexRoute = ChangelogIndexRouteImport.update({
+  id: '/changelog/',
+  path: '/changelog/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsIndexRoute = DocsIndexRouteImport.update({
@@ -475,6 +481,7 @@ export interface FileRoutesByFullPath {
   '/docs/api': typeof DocsApiRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
+  '/changelog/': typeof ChangelogIndexRoute
   '/docs/': typeof DocsIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
@@ -542,6 +549,7 @@ export interface FileRoutesByTo {
   '/docs/api': typeof DocsApiRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
+  '/changelog': typeof ChangelogIndexRoute
   '/docs': typeof DocsIndexRoute
   '/pricing': typeof PricingIndexRoute
   '/rankings': typeof RankingsIndexRoute
@@ -613,6 +621,7 @@ export interface FileRoutesById {
   '/docs/api': typeof DocsApiRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
+  '/changelog/': typeof ChangelogIndexRoute
   '/docs/': typeof DocsIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
@@ -683,6 +692,7 @@ export interface FileRouteTypes {
     | '/docs/api'
     | '/oauth/$provider'
     | '/about/'
+    | '/changelog/'
     | '/docs/'
     | '/pricing/'
     | '/rankings/'
@@ -750,6 +760,7 @@ export interface FileRouteTypes {
     | '/docs/api'
     | '/oauth/$provider'
     | '/about'
+    | '/changelog'
     | '/docs'
     | '/pricing'
     | '/rankings'
@@ -820,6 +831,7 @@ export interface FileRouteTypes {
     | '/docs/api'
     | '/oauth/$provider'
     | '/about/'
+    | '/changelog/'
     | '/docs/'
     | '/pricing/'
     | '/rankings/'
@@ -882,6 +894,7 @@ export interface RootRouteChildren {
   DocsApiRoute: typeof DocsApiRoute
   OauthProviderRoute: typeof OauthProviderRoute
   AboutIndexRoute: typeof AboutIndexRoute
+  ChangelogIndexRoute: typeof ChangelogIndexRoute
   DocsIndexRoute: typeof DocsIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
   RankingsIndexRoute: typeof RankingsIndexRoute
@@ -1030,6 +1043,13 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about/'
       preLoaderRoute: typeof AboutIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/changelog/': {
+      id: '/changelog/'
+      path: '/changelog'
+      fullPath: '/changelog/'
+      preLoaderRoute: typeof ChangelogIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs/': {
@@ -1533,6 +1553,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocsApiRoute: DocsApiRoute,
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,
+  ChangelogIndexRoute: ChangelogIndexRoute,
   DocsIndexRoute: DocsIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   RankingsIndexRoute: RankingsIndexRoute,
