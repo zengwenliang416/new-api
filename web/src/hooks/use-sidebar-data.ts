@@ -18,12 +18,17 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  BotMessageSquare,
   Box,
+  BrainCircuit,
   ClipboardList,
   CreditCard,
   FileText,
   FlaskConical,
+  Gauge,
+  Gift,
   Headset,
+  ImageIcon,
   Key,
   LayoutDashboard,
   LifeBuoy,
@@ -60,9 +65,23 @@ export function useSidebarData(): SidebarData {
         title: t('Chat'),
         items: [
           {
+            title: t('Workspace'),
+            url: '/workspace',
+            configUrls: ['/playground'],
+            icon: BotMessageSquare,
+            badge: t('Preview'),
+          },
+          {
             title: t('Playground'),
             url: '/playground',
             icon: FlaskConical,
+          },
+          {
+            title: t('Image generation'),
+            url: '/image',
+            configUrls: ['/playground'],
+            icon: ImageIcon,
+            badge: t('Preview'),
           },
           {
             title: t('Chat'),
@@ -84,6 +103,20 @@ export function useSidebarData(): SidebarData {
             title: t('Dashboard'),
             url: '/dashboard/models',
             icon: LayoutDashboard,
+          },
+          {
+            title: t('Performance'),
+            url: '/performance',
+            configUrls: ['/dashboard/models'],
+            icon: Gauge,
+            badge: t('Preview'),
+          },
+          {
+            title: t('Intelligence monitoring'),
+            url: '/intelligence',
+            configUrls: ['/dashboard/models'],
+            icon: BrainCircuit,
+            badge: t('Preview'),
           },
           {
             title: t('API Keys'),
@@ -127,6 +160,13 @@ export function useSidebarData(): SidebarData {
             title: t('Security & Access'),
             url: '/security',
             icon: ShieldCheck,
+          },
+          {
+            title: t('Invite friends'),
+            url: '/invitation',
+            configUrls: ['/wallet'],
+            icon: Gift,
+            badge: t('Preview'),
           },
           {
             title: t('Support Center'),

@@ -83,7 +83,13 @@ describe('security sidebar visibility', () => {
       result.current
         .find((group) => group.id === 'personal')
         ?.items.map((item) => item.title)
-    ).toEqual(['Wallet', 'Profile', 'Security & Access', 'Support Center'])
+    ).toEqual([
+      'Wallet',
+      'Profile',
+      'Security & Access',
+      'Invite friends',
+      'Support Center',
+    ])
     expect(
       result.current
         .flatMap((group) => group.items)
@@ -117,6 +123,36 @@ describe('security sidebar visibility', () => {
         .flatMap((group) => group.items)
         .some((item) => item.title === 'Security & Access')
     ).toBe(true)
+  })
+})
+
+describe('preview navigation', () => {
+  it('shows the five preview destinations beside the existing tools', () => {
+    const { result } = sidebarFor()
+    const previews = result.current
+      .flatMap((group) => group.items)
+      .filter((item) => item.badge === 'Preview')
+    expect(
+      previews.map((item) => ('url' in item ? item.url : undefined))
+    ).toEqual([
+      '/workspace',
+      '/image',
+      '/performance',
+      '/intelligence',
+      '/invitation',
+    ])
+  })
+
+  it('keeps preview navigation within the corresponding existing module settings', () => {
+    const { result } = sidebarFor({
+      chat: { enabled: true, playground: false },
+      console: { enabled: true, detail: false },
+      personal: { enabled: true, topup: false },
+    })
+    const previews = result.current
+      .flatMap((group) => group.items)
+      .filter((item) => item.badge === 'Preview')
+    expect(previews).toHaveLength(0)
   })
 })
 
