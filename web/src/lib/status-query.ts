@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { queryOptions, type QueryClient } from '@tanstack/react-query'
 
 import { getStatus } from '@/lib/api'
-import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
+import { getBrand, normalizeBrandId, resolveSystemName } from '@/lib/brands'
 import {
   useSystemConfigStore,
   type CurrencyConfig,
@@ -57,6 +57,28 @@ function toNumber(value: unknown, fallback: number): number {
   return fallback
 }
 
+/** Read an optional status string, trimming whitespace and dropping non-strings. */
+function trimOrEmpty(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * Read a field from a status payload, falling back to the nested `data` object
+ * some deployments forward verbatim from the legacy `/api/status` shape.
+ */
+export function readStatusField(
+  status: StatusData | undefined | null,
+  key: string
+): unknown {
+  if (!status || typeof status !== 'object') return undefined
+  if (key in status) return status[key]
+  const data = status.data
+  if (data && typeof data === 'object' && key in data) {
+    return (data as StatusData)[key]
+  }
+  return undefined
+}
+
 /**
  * Map `/api/status` response data to our persisted system config structure
  */
@@ -91,9 +113,36 @@ export function mapStatusDataToConfig(
     ),
   }
 
+  const rawLogo = trimOrEmpty(data.logo)
+  const siteBrand = normalizeBrandId(data.site_brand as string | undefined)
+  const brand = getBrand(siteBrand)
+  const usesLegacyMotionCoverLogo =
+    siteBrand === 'motioncover' &&
+    (rawLogo ===
+      'https://new-api.motion-cover.com/branding/motioncover-logo-light-20260824.png' ||
+      rawLogo === brand.logoLight)
+  const sharedLogo = usesLegacyMotionCoverLogo ? '' : rawLogo
+  const logoLight =
+    trimOrEmpty(data.logo_light) || sharedLogo || brand.logoLight
+  const logoDark = trimOrEmpty(data.logo_dark) || sharedLogo || brand.logoDark
+
   return {
-    systemName: (data.system_name as string | undefined) || DEFAULT_SYSTEM_NAME,
-    logo: (data.logo as string | undefined) || DEFAULT_LOGO,
+    siteBrand,
+    systemName: resolveSystemName(trimOrEmpty(data.system_name), siteBrand),
+    logo: sharedLogo || logoLight,
+    logoLight,
+    logoDark,
+    favicon: trimOrEmpty(data.favicon) || brand.favicon,
+    homeHeroTitle: data.home_hero_title as string | undefined,
+    homeHeroPoweredBy: data.home_hero_powered_by as string | undefined,
+    homeHeroBadgeMotionLight:
+      trimOrEmpty(data.home_hero_badge_motion_light) ||
+      brand.motionBadgeLight ||
+      '',
+    homeHeroBadgeMotionDark:
+      trimOrEmpty(data.home_hero_badge_motion_dark) ||
+      brand.motionBadgeDark ||
+      '',
     footerHtml: data.footer_html as string | undefined,
     demoSiteEnabled: data.demo_site_enabled as boolean | undefined,
     displayTokenStatEnabled: data.display_token_stat_enabled as

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import { DEFAULT_BRAND, DEFAULT_BRAND_ID, type BrandId } from '@/lib/brands'
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
 
 export type CurrencyDisplayType = 'USD' | 'CNY' | 'TOKENS' | 'CUSTOM'
@@ -40,7 +41,15 @@ export interface CurrencyConfig {
 
 export interface SystemConfig {
   systemName: string
+  siteBrand: BrandId
   logo: string
+  logoLight: string
+  logoDark: string
+  favicon: string
+  homeHeroTitle?: string
+  homeHeroPoweredBy?: string
+  homeHeroBadgeMotionLight?: string
+  homeHeroBadgeMotionDark?: string
   footerHtml?: string
   demoSiteEnabled?: boolean
   displayTokenStatEnabled?: boolean
@@ -74,7 +83,11 @@ export const useSystemConfigStore = create<SystemConfigState>()(
     (set) => ({
       config: {
         systemName: DEFAULT_SYSTEM_NAME,
+        siteBrand: DEFAULT_BRAND_ID,
         logo: DEFAULT_LOGO,
+        logoLight: DEFAULT_BRAND.logoLight,
+        logoDark: DEFAULT_BRAND.logoDark,
+        favicon: DEFAULT_BRAND.favicon,
         currency: { ...DEFAULT_CURRENCY_CONFIG },
       },
       loading: true,
@@ -86,7 +99,7 @@ export const useSystemConfigStore = create<SystemConfigState>()(
             ...newConfig,
             currency: {
               ...state.config.currency,
-              ...(newConfig.currency ?? {}),
+              ...newConfig.currency,
             },
           },
         })),

@@ -745,3 +745,440 @@ For commercial licensing, please contact support@quantumnous.com
     display: none;
   }
 }
+
+/* ── Home portal: brand tokens ── */
+:root {
+  --home-accent: #3080ff;
+  --home-accent-soft: #54a2ff;
+}
+
+@supports (color: lab(0% 0 0)) {
+  :root {
+    --home-accent: lab(54.1733% 13.3428 -74.6851);
+    --home-accent-soft: lab(65.0363% -1.42446 -56.9792);
+  }
+}
+
+/* ── Home portal: mask reveal ── */
+@keyframes landing-mask-rise {
+  from {
+    opacity: 0;
+    transform: translateY(112%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.landing-mask {
+  display: block;
+  margin-bottom: -0.14em;
+  padding-bottom: 0.14em;
+  overflow: hidden;
+}
+
+.landing-animate-mask-rise {
+  display: inline-block;
+  animation: landing-mask-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Home portal: rule list reveal ── */
+@keyframes rule-line-in {
+  from {
+    opacity: 0;
+    transform: translate(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0);
+  }
+}
+
+@keyframes rule-icon-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.landing-animate-rule-line li {
+  opacity: 0;
+  animation: rule-line-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--rule-delay, 0s);
+}
+
+.landing-animate-rule-line .rule-line-icon {
+  animation: rule-icon-pop 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--rule-delay, 0s) + 90ms);
+}
+
+/* ── Home portal: request flow ── */
+@keyframes flow-dash-travel {
+  from {
+    transform: translate(-100%);
+  }
+  to {
+    transform: translate(100%);
+  }
+}
+
+.flow-dash {
+  width: 38%;
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .flow-dash {
+    animation: flow-dash-travel 2.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-dash {
+    opacity: 0.9;
+  }
+}
+
+@keyframes flow-chip-pulse {
+  0%,
+  62%,
+  100% {
+    border-color: color-mix(in oklch, var(--border) 30%, transparent);
+    background-color: color-mix(in oklch, var(--muted) 20%, transparent);
+    color: color-mix(in oklch, var(--foreground) 55%, transparent);
+  }
+  18%,
+  30% {
+    border-color: color-mix(in oklch, var(--home-accent) 38%, transparent);
+    background-color: color-mix(in oklch, var(--home-accent) 8%, transparent);
+    color: var(--foreground);
+  }
+}
+
+.flow-chip {
+  animation: flow-chip-pulse 3.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  animation-delay: var(--flow-stagger, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-chip {
+    animation: none;
+    border-color: var(--home-accent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .flow-chip {
+      border-color: color-mix(in oklch, var(--home-accent) 20%, transparent);
+    }
+  }
+}
+
+/* ── Home portal: entry ripple ── */
+.home-entry-ambient-layer {
+  --home-entry-final-opacity: 1;
+}
+
+@keyframes home-entry-ripple-reveal {
+  0% {
+    clip-path: circle(0 at var(--home-entry-x, 50%) var(--home-entry-y, 42%));
+    opacity: 0;
+  }
+  58% {
+    opacity: var(--home-entry-final-opacity);
+  }
+  to {
+    clip-path: circle(
+      150vmax at var(--home-entry-x, 50%) var(--home-entry-y, 42%)
+    );
+    opacity: var(--home-entry-final-opacity);
+  }
+}
+
+@keyframes home-entry-ripple-ring {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.05);
+  }
+  26% {
+    opacity: 0.48;
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(4.9);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .home-entry-hero .home-entry-reveal-layer {
+    clip-path: circle(0 at var(--home-entry-x, 50%) var(--home-entry-y, 42%));
+    opacity: 0;
+  }
+
+  .home-entry-ripple-ring {
+    position: absolute;
+    top: var(--home-entry-y, 42%);
+    left: var(--home-entry-x, 50%);
+    z-index: -15;
+    width: 28rem;
+    height: 28rem;
+    border-radius: 9999px;
+    background: radial-gradient(
+      circle,
+      transparent 0 38%,
+      var(--primary) 43%,
+      var(--primary) 54%,
+      transparent 68%
+    );
+    pointer-events: none;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .home-entry-ripple-ring {
+      background: radial-gradient(
+        circle,
+        transparent 0 38%,
+        color-mix(in oklch, var(--primary) 26%, transparent) 43%,
+        color-mix(in oklch, var(--primary) 13%, transparent) 54%,
+        transparent 68%
+      );
+    }
+  }
+
+  .home-entry-ripple-ring {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.05);
+  }
+
+  .home-entry-hero.home-entry-started .home-entry-reveal-layer {
+    animation: home-entry-ripple-reveal 0.88s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .home-entry-hero.home-entry-started .home-entry-ripple-ring {
+    animation: home-entry-ripple-ring 0.92s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-animate-fade-up,
+  .landing-animate-fade-in,
+  .landing-animate-scale-in,
+  .landing-animate-fade-left,
+  .landing-animate-fade-right,
+  .landing-animate-mask-rise,
+  .landing-animate-rule-line li,
+  .landing-animate-rule-line .rule-line-icon {
+    opacity: 1 !important;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .home-entry-hero .home-entry-reveal-layer,
+  .home-entry-ripple-ring {
+    clip-path: none !important;
+    filter: none !important;
+    pointer-events: auto !important;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .home-entry-ripple-ring {
+    display: none !important;
+  }
+
+  .home-entry-hero .home-entry-ambient-layer {
+    opacity: 1 !important;
+  }
+}
+
+/* ── Home portal: brand reveal ── */
+.home-brand-reveal {
+  position: relative;
+  z-index: 0;
+  height: var(--home-brand-reveal-height);
+  --home-brand-reveal-height: clamp(14rem, 28vw, 27rem);
+  pointer-events: none;
+}
+
+.home-brand-reveal-fixed {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 0;
+  height: var(--home-brand-reveal-height);
+  color: var(--home-brand-ink);
+  isolation: isolate;
+  background: transparent;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.home-brand-reveal-fixed[data-brand-reveal-theme='hlool'] {
+  --home-brand-bg: transparent;
+  --home-brand-ink: var(--foreground);
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .home-brand-reveal-fixed[data-brand-reveal-theme='hlool'] {
+    --home-brand-ink: color-mix(in oklab, var(--foreground) 72%, #2563eb);
+  }
+}
+
+.home-brand-reveal-fixed[data-brand-reveal-theme='shuai'] {
+  --home-brand-bg: transparent;
+  --home-brand-ink: var(--foreground);
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .home-brand-reveal-fixed[data-brand-reveal-theme='shuai'] {
+    --home-brand-ink: color-mix(in oklab, var(--foreground) 82%, #2563eb);
+  }
+}
+
+.home-brand-reveal-canvas,
+.home-brand-reveal-static {
+  position: absolute;
+  inset: 0;
+}
+
+.home-brand-reveal-canvas {
+  display: block;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.home-brand-reveal-static {
+  z-index: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.home-brand-reveal-static[data-canvas-active='true'] {
+  visibility: hidden;
+}
+
+.home-brand-reveal-word {
+  position: absolute;
+  bottom: -0.1em;
+  left: 50%;
+  color: var(--home-brand-ink);
+  font-size: clamp(5rem, 14.5vw, 17rem);
+  font-weight: 900;
+  line-height: 0.78;
+  letter-spacing: 0;
+  white-space: nowrap;
+  transform: translate(-50%);
+}
+
+/* ── Home portal: scrollbar ── */
+html.home-page-scrollbar {
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+  overflow-y: auto;
+}
+
+html.home-page-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Reference portal palette. Keep operating-site presentation local to public
+ * pages so the console retains the user's configured theme. */
+[data-public-brand='shuai'],
+[data-public-brand='hlool'] {
+  --radius: 0rem;
+  --font-body: var(--font-sans);
+  --background: #fff;
+  --foreground: #0a0a0a;
+  --card: #fff;
+  --card-foreground: #0a0a0a;
+  --popover: #fff;
+  --popover-foreground: #0a0a0a;
+  --primary: #070707;
+  --primary-foreground: #fafafa;
+  --secondary: #eee;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f5f5f5;
+  --muted-foreground: #606060;
+  --accent: #eee;
+  --accent-foreground: #0a0a0a;
+  --border: #e8e8e8;
+  --input: #e8e8e8;
+  --ring: #a1a1a1;
+  font-family: var(--font-body);
+}
+
+.dark [data-public-brand='shuai'],
+.dark [data-public-brand='hlool'] {
+  --background: #1e1e1e;
+  --foreground: #f3f3f3;
+  --card: #2a2a2a;
+  --card-foreground: #f3f3f3;
+  --popover: #2f2f2f;
+  --popover-foreground: #f3f3f3;
+  --primary: #f3f3f3;
+  --primary-foreground: #0c0c0c;
+  --secondary: #373737;
+  --secondary-foreground: #f3f3f3;
+  --muted: #2f2f2f;
+  --muted-foreground: #b7b7b7;
+  --accent: #3e3e3e;
+  --accent-foreground: #fafafa;
+  --border: #ffffff1a;
+  --input: #ffffff2b;
+  --ring: #989898;
+}
+
+/* MotionCover deployment palette, taken from the published portal. */
+[data-public-brand='motioncover'] {
+  --radius: 1.375rem;
+  --font-body: var(--font-sans);
+  --background: #f4f7fb;
+  --foreground: #091522;
+  --card: #fff;
+  --card-foreground: #091522;
+  --popover: #fff;
+  --popover-foreground: #091522;
+  --primary: #3d60e1;
+  --primary-foreground: #fff;
+  --secondary: #e4ecfb;
+  --secondary-foreground: #10253b;
+  --muted: #eaf0f7;
+  --muted-foreground: #5f7082;
+  --accent: #d7f5eb;
+  --accent-foreground: #10253b;
+  --border: #09152224;
+  --input: #09152224;
+  --ring: #5277ff;
+  --home-accent: #5277ff;
+  --home-accent-soft: #5277ff;
+  --home-brand-ink: #10253b;
+  --home-brand-bg: transparent;
+  font-family: var(--font-body);
+}
+
+.dark [data-public-brand='motioncover'] {
+  --background: #07121f;
+  --foreground: #f2f6ff;
+  --card: #0d1e31;
+  --card-foreground: #f2f6ff;
+  --popover: #0d1e31;
+  --popover-foreground: #f2f6ff;
+  --secondary: #142b43;
+  --secondary-foreground: #cbd8ea;
+  --muted: #10253b;
+  --muted-foreground: #a6b7ca;
+  --accent: #183d3c;
+  --accent-foreground: #b8f3df;
+  --border: #e2efff29;
+  --input: #e2efff29;
+  --ring: #78e3c0;
+  --home-accent-soft: #78e3c0;
+  --home-brand-ink: #cbd8ea;
+}

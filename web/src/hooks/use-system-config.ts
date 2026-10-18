@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
+import { useTheme } from '@/context/theme-provider'
+import { getBrand, normalizeBrandId, resolveSystemName } from '@/lib/brands'
 import { DEFAULT_LOGO } from '@/lib/constants'
 import { applyFaviconToDom } from '@/lib/dom-utils'
 import { ensureStatus } from '@/lib/status-query'
@@ -36,13 +39,13 @@ function preloadImage(
   onError: () => void
 ): () => void {
   const img = new Image()
-  img.onload = onLoad
-  img.onerror = onError
+  img.addEventListener('load', onLoad)
+  img.addEventListener('error', onError)
   img.src = src
 
   return () => {
-    img.onload = null
-    img.onerror = null
+    img.removeEventListener('load', onLoad)
+    img.removeEventListener('error', onError)
   }
 }
 
@@ -62,6 +65,8 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
   const queryClient = useQueryClient()
   const { config, loading, loadedLogoUrl, setLoadedLogoUrl, setLoading } =
     useSystemConfigStore()
+  const { resolvedTheme } = useTheme()
+  const { i18n } = useTranslation()
 
   // Load config from backend via the shared `/api/status` cache.
   // `ensureStatus` writes the mapped config into this store itself, so there is
@@ -82,19 +87,28 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
     if (autoLoad) loadConfig()
   }, [autoLoad, loadConfig])
 
-  // Preload logo image when URL changes
-  useEffect(() => {
-    const { logo } = config
+  const siteBrand = normalizeBrandId(config.siteBrand)
+  const brand = getBrand(siteBrand)
+  const logoLight = config.logoLight || config.logo || brand.logoLight
+  const logoDark = config.logoDark || config.logo || brand.logoDark
+  const logo = resolvedTheme === 'dark' ? logoDark : logoLight
+  const themeFavicon =
+    resolvedTheme === 'dark'
+      ? brand.faviconDark || brand.favicon
+      : brand.favicon
+  const favicon =
+    !config.favicon || config.favicon === brand.favicon
+      ? themeFavicon
+      : config.favicon
 
-    // Skip if logo is already loaded
+  // Preload the theme-resolved logo image when its URL changes
+  useEffect(() => {
     if (!logo || logo === loadedLogoUrl) return
 
-    // Preload new logo
     return preloadImage(
       logo,
       () => {
         setLoadedLogoUrl(logo)
-        applyFaviconToDom(logo)
       },
       () => {
         if (logo !== DEFAULT_LOGO) {
@@ -105,12 +119,21 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
         setLoadedLogoUrl(logo)
       }
     )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.logo, loadedLogoUrl, setLoadedLogoUrl])
+  }, [logo, loadedLogoUrl, setLoadedLogoUrl])
+
+  useEffect(() => {
+    applyFaviconToDom(favicon)
+  }, [favicon])
 
   return {
     ...config,
+    siteBrand,
+    systemName: resolveSystemName(config.systemName, siteBrand, i18n.language),
+    logo,
+    logoLight,
+    logoDark,
+    favicon,
     loading,
-    logoLoaded: config.logo === loadedLogoUrl && !!loadedLogoUrl,
+    logoLoaded: logo === loadedLogoUrl && !!loadedLogoUrl,
   }
 }

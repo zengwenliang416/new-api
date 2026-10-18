@@ -24,6 +24,8 @@ type Option struct {
 	Value string `json:"value"`
 }
 
+const defaultThirdPartyReportsJSON = `[]`
+
 func AllOption() ([]*Option, error) {
 	var options []*Option
 	var err error
@@ -81,6 +83,19 @@ func InitOptionMap() {
 	common.OptionMap["Footer"] = common.Footer
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["Logo"] = common.Logo
+	common.OptionMap["LogoLight"] = ""
+	common.OptionMap["LogoDark"] = ""
+	common.OptionMap["Favicon"] = ""
+	common.OptionMap["SiteBrand"] = "motioncover"
+	common.OptionMap["HomeHeroTitle"] = ""
+	common.OptionMap["HomeHeroPoweredBy"] = ""
+	common.OptionMap["HomeHeroBadgeMotionLight"] = ""
+	common.OptionMap["HomeHeroBadgeMotionDark"] = ""
+	common.OptionMap["HomeHeroVideoUrl"] = ""
+	common.OptionMap["HomeHeroVideoTitle"] = ""
+	common.OptionMap["HomeHeroVideoSubtitle"] = ""
+	common.OptionMap["ThirdPartyReports"] = defaultThirdPartyReportsJSON
+	common.OptionMap["ThirdPartyReportsEnabled"] = "false"
 	common.OptionMap["ServerAddress"] = ""
 	common.OptionMap["TaskPublicAddress"] = system_setting.TaskPublicAddress
 	common.OptionMap["WorkerUrl"] = system_setting.WorkerUrl

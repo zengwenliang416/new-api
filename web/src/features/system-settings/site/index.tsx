@@ -38,6 +38,19 @@ const defaultSiteSettings: SiteSettings = {
   'legal.privacy_policy': '',
   HeaderNavModules: '',
   SidebarModulesAdmin: '',
+  SiteBrand: 'motioncover',
+  LogoLight: '',
+  LogoDark: '',
+  Favicon: '',
+  HomeHeroTitle: '',
+  HomeHeroPoweredBy: '',
+  HomeHeroBadgeMotionLight: '',
+  HomeHeroBadgeMotionDark: '',
+  HomeHeroVideoUrl: '',
+  HomeHeroVideoTitle: '',
+  HomeHeroVideoSubtitle: '',
+  ThirdPartyReports: '',
+  ThirdPartyReportsEnabled: false,
 }
 
 export function SiteSettings() {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -51,31 +53,57 @@ func GetStatus(c *gin.Context) {
 
 	legalSetting := system_setting.GetLegalSettings()
 
+	thirdPartyReportsRaw := strings.TrimSpace(common.OptionMap["ThirdPartyReports"])
+	thirdPartyReports := make([]any, 0)
+	if thirdPartyReportsRaw != "" {
+		_ = common.UnmarshalJsonStr(thirdPartyReportsRaw, &thirdPartyReports)
+	}
+	thirdPartyReportsEnabled := false
+	if rawEnabled := strings.TrimSpace(common.OptionMap["ThirdPartyReportsEnabled"]); rawEnabled != "" {
+		if parsed, parseErr := strconv.ParseBool(rawEnabled); parseErr == nil {
+			thirdPartyReportsEnabled = parsed
+		}
+	}
+
 	data := gin.H{
-		"version":                     common.Version,
-		"start_time":                  common.StartTime,
-		"email_verification":          common.EmailVerificationEnabled,
-		"github_oauth":                common.GitHubOAuthEnabled,
-		"github_client_id":            common.GitHubClientId,
-		"discord_oauth":               system_setting.GetDiscordSettings().Enabled,
-		"discord_client_id":           system_setting.GetDiscordSettings().ClientId,
-		"linuxdo_oauth":               common.LinuxDOOAuthEnabled,
-		"linuxdo_client_id":           common.LinuxDOClientId,
-		"linuxdo_minimum_trust_level": common.LinuxDOMinimumTrustLevel,
-		"telegram_oauth":              common.TelegramOAuthEnabled,
-		"telegram_oauth_configured":   oauth.TelegramConfigurationError() == nil,
-		"telegram_bot_name":           common.TelegramBotName,
-		"theme":                       "default",
-		"system_name":                 common.SystemName,
-		"logo":                        common.Logo,
-		"footer_html":                 common.Footer,
-		"wechat_qrcode":               common.WeChatAccountQRCodeImageURL,
-		"wechat_login":                common.WeChatAuthEnabled,
-		"server_address":              system_setting.ServerAddress,
-		"turnstile_check":             common.TurnstileCheckEnabled,
-		"turnstile_site_key":          common.TurnstileSiteKey,
-		"docs_link":                   operation_setting.GetGeneralSetting().DocsLink,
-		"quota_per_unit":              common.QuotaPerUnit,
+		"version":                        common.Version,
+		"start_time":                     common.StartTime,
+		"email_verification":             common.EmailVerificationEnabled,
+		"github_oauth":                   common.GitHubOAuthEnabled,
+		"github_client_id":               common.GitHubClientId,
+		"discord_oauth":                  system_setting.GetDiscordSettings().Enabled,
+		"discord_client_id":              system_setting.GetDiscordSettings().ClientId,
+		"linuxdo_oauth":                  common.LinuxDOOAuthEnabled,
+		"linuxdo_client_id":              common.LinuxDOClientId,
+		"linuxdo_minimum_trust_level":    common.LinuxDOMinimumTrustLevel,
+		"telegram_oauth":                 common.TelegramOAuthEnabled,
+		"telegram_oauth_configured":      oauth.TelegramConfigurationError() == nil,
+		"telegram_bot_name":              common.TelegramBotName,
+		"theme":                          "default",
+		"system_name":                    common.SystemName,
+		"logo":                           common.Logo,
+		"logo_light":                     common.OptionMap["LogoLight"],
+		"logo_dark":                      common.OptionMap["LogoDark"],
+		"favicon":                        common.OptionMap["Favicon"],
+		"site_brand":                     common.OptionMap["SiteBrand"],
+		"home_hero_title":                common.OptionMap["HomeHeroTitle"],
+		"home_hero_powered_by":           common.OptionMap["HomeHeroPoweredBy"],
+		"home_hero_badge_motion_light":   common.OptionMap["HomeHeroBadgeMotionLight"],
+		"home_hero_badge_motion_dark":    common.OptionMap["HomeHeroBadgeMotionDark"],
+		"home_hero_video_url":            common.OptionMap["HomeHeroVideoUrl"],
+		"home_hero_video_title":          common.OptionMap["HomeHeroVideoTitle"],
+		"home_hero_video_subtitle":       common.OptionMap["HomeHeroVideoSubtitle"],
+		"third_party_reports":            thirdPartyReports,
+		"third_party_reports_configured": thirdPartyReportsRaw != "",
+		"third_party_reports_enabled":    thirdPartyReportsEnabled,
+		"footer_html":                    common.Footer,
+		"wechat_qrcode":                  common.WeChatAccountQRCodeImageURL,
+		"wechat_login":                   common.WeChatAuthEnabled,
+		"server_address":                 system_setting.ServerAddress,
+		"turnstile_check":                common.TurnstileCheckEnabled,
+		"turnstile_site_key":             common.TurnstileSiteKey,
+		"docs_link":                      operation_setting.GetGeneralSetting().DocsLink,
+		"quota_per_unit":                 common.QuotaPerUnit,
 		// 兼容旧前端：保留 display_in_currency，同时提供新的 quota_display_type
 		"display_in_currency":           operation_setting.IsCurrencyDisplay(),
 		"quota_display_type":            operation_setting.GetQuotaDisplayType(),

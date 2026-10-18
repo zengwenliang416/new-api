@@ -28,6 +28,7 @@ import { NoticeSection } from '../maintenance/notice-section'
 import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
 import type { SiteSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { SiteBrandingSection } from './site-branding-section'
 
 const SITE_SECTIONS = [
   {
@@ -50,6 +51,29 @@ const SITE_SECTIONS = [
             user_agreement: settings['legal.user_agreement'],
             privacy_policy: settings['legal.privacy_policy'],
           },
+        }}
+      />
+    ),
+  },
+  {
+    id: 'site-branding',
+    titleKey: 'Site & Branding',
+    build: (settings: SiteSettings) => (
+      <SiteBrandingSection
+        defaultValues={{
+          SiteBrand: settings.SiteBrand,
+          LogoLight: settings.LogoLight,
+          LogoDark: settings.LogoDark,
+          Favicon: settings.Favicon,
+          HomeHeroTitle: settings.HomeHeroTitle,
+          HomeHeroPoweredBy: settings.HomeHeroPoweredBy,
+          HomeHeroBadgeMotionLight: settings.HomeHeroBadgeMotionLight,
+          HomeHeroBadgeMotionDark: settings.HomeHeroBadgeMotionDark,
+          HomeHeroVideoUrl: settings.HomeHeroVideoUrl,
+          HomeHeroVideoTitle: settings.HomeHeroVideoTitle,
+          HomeHeroVideoSubtitle: settings.HomeHeroVideoSubtitle,
+          ThirdPartyReportsEnabled: settings.ThirdPartyReportsEnabled,
+          ThirdPartyReports: settings.ThirdPartyReports,
         }}
       />
     ),

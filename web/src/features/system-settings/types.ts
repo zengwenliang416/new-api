@@ -154,6 +154,19 @@ export type SiteSettings = {
   'legal.privacy_policy': string
   HeaderNavModules: string
   SidebarModulesAdmin: string
+  SiteBrand: string
+  LogoLight: string
+  LogoDark: string
+  Favicon: string
+  HomeHeroTitle: string
+  HomeHeroPoweredBy: string
+  HomeHeroBadgeMotionLight: string
+  HomeHeroBadgeMotionDark: string
+  HomeHeroVideoUrl: string
+  HomeHeroVideoTitle: string
+  HomeHeroVideoSubtitle: string
+  ThirdPartyReports: string
+  ThirdPartyReportsEnabled: boolean
 }
 
 export type AuthSettings = {
@@ -374,6 +387,12 @@ export type OperationsSettings = {
   WorkerUrl: string
   WorkerValidKey: string
   WorkerAllowHttpImageRequestEnabled: boolean
+  SupportWorkerUrl: string
+  SupportWorkerJwtSecret: string
+  SupportWorkerCallbackSecret: string
+  SupportWorkerSiteID: string
+  SupportWorkerSessionTTLMinutes: number
+  SupportWorkerTranslationEnabled: boolean
   LogConsumeEnabled: boolean
   'performance_setting.disk_cache_enabled': boolean
   'performance_setting.disk_cache_threshold_mb': number
