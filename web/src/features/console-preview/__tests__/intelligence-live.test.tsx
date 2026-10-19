@@ -378,6 +378,69 @@ describe('live intelligence monitoring', () => {
 })
 
 describe('generated drawing isolation', () => {
+  it('fits a fixed-size drawing inside its viewport without cropping or stretching', () => {
+    const html = createProbeArtifactDocument(
+      '<svg width="960" height="640" viewBox="0 0 960 640" preserveAspectRatio="xMidYMid slice"><rect width="960" height="640" /><svg width="80" height="40" viewBox="0 0 8 4"><rect width="8" height="4" /></svg></svg>'
+    )
+    const document = new DOMParser().parseFromString(html ?? '', 'text/html')
+    const svg = document.querySelector('body > svg')
+    expect(svg?.getAttribute('viewBox')).toBe('0 0 960 640')
+    expect(svg?.getAttribute('preserveAspectRatio')).toBe('xMidYMid meet')
+
+    // Check the sizing contract in a real stylesheet; jsdom does not lay out SVG.
+    const style = window.document.createElement('style')
+    style.textContent = document.querySelector('style')?.textContent ?? ''
+    window.document.head.append(style)
+    try {
+      const rootRule = [...(style.sheet?.cssRules ?? [])].find((rule) =>
+        svg?.matches((rule as CSSStyleRule).selectorText)
+      ) as CSSStyleRule | undefined
+      expect(rootRule?.style.getPropertyValue('width')).toBe('100%')
+      expect(rootRule?.style.getPropertyValue('height')).toBe('100%')
+      expect(rootRule?.style.getPropertyValue('display')).toBe('block')
+      expect(
+        document
+          .querySelector('svg svg')
+          ?.matches(rootRule?.selectorText ?? 'svg')
+      ).toBe(false)
+    } finally {
+      style.remove()
+    }
+  })
+
+  it.each([
+    ['1200', '800', '0 0 1200 800'],
+    ['800px', '1200px', '0 0 800 1200'],
+    ['100%', '800', null],
+    ['0', '800', null],
+  ])(
+    'uses absolute canvas dimensions %s by %s when viewBox is missing',
+    (width, height, expected) => {
+      const html = createProbeArtifactDocument(
+        `<svg width="${width}" height="${height}"><rect width="12" height="12" /></svg>`
+      )
+      const document = new DOMParser().parseFromString(html ?? '', 'text/html')
+      expect(document.querySelector('svg')?.getAttribute('viewBox')).toBe(
+        expected
+      )
+    }
+  )
+
+  it('preserves nonzero drawing coordinates and nested SVG sizing', () => {
+    const html = createProbeArtifactDocument(
+      '<svg viewBox="-20 10 960 640"><svg x="20" y="30" width="80" height="40" viewBox="0 0 8 4" preserveAspectRatio="xMinYMin slice"><rect width="8" height="4" /></svg></svg>'
+    )
+    const document = new DOMParser().parseFromString(html ?? '', 'text/html')
+    expect(document.querySelector('body > svg')?.getAttribute('viewBox')).toBe(
+      '-20 10 960 640'
+    )
+    const nested = document.querySelector('svg svg')
+    expect(nested?.getAttribute('width')).toBe('80')
+    expect(nested?.getAttribute('height')).toBe('40')
+    expect(nested?.getAttribute('viewBox')).toBe('0 0 8 4')
+    expect(nested?.getAttribute('preserveAspectRatio')).toBe('xMinYMin slice')
+  })
+
   it('strips active markup and remote image references while keeping SVG geometry', () => {
     const document = createProbeArtifactDocument(
       '<style>@keyframes move{to{transform:translateX(10px)}}circle{animation:move 1s infinite}</style><svg onload="steal()"><script>steal()</script><foreignObject><iframe src="https://evil.test"></iframe></foreignObject><image href="https://evil.test/image" /><a href="https://evil.test"><circle r="4" /></a><circle r="5" /></svg>'

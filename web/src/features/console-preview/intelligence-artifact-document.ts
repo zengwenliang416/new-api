@@ -214,5 +214,23 @@ export function createProbeArtifactDocument(html: string): string | null {
       if (!allowed) element.removeAttributeNode(attribute)
     }
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}body{display:grid;place-items:center}svg{max-width:100%;max-height:100%}</style></head><body>${svg.outerHTML}</body></html>`
+
+  // A fixed-size canvas needs a coordinate system before its viewport can shrink.
+  // Percentage dimensions do not describe an intrinsic canvas size.
+  if (!svg.hasAttribute('viewBox')) {
+    const dimensions = ['width', 'height'].map((name) => {
+      const value = svg.getAttribute(name)?.trim() ?? ''
+      return /^(?:\d+(?:\.\d*)?|\.\d+)(?:px)?$/i.test(value)
+        ? Number(value.replace(/px$/i, ''))
+        : Number.NaN
+    })
+    if (dimensions.every((value) => Number.isFinite(value) && value > 0)) {
+      svg.setAttribute('viewBox', `0 0 ${dimensions[0]} ${dimensions[1]}`)
+    }
+  }
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+
+  // Size only the outer viewport. Grid intrinsic tracks can retain the SVG's
+  // original height, while a global svg rule would resize nested viewports.
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}body > svg{display:block;width:100%;height:100%}</style></head><body>${svg.outerHTML}</body></html>`
 }
