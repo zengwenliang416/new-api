@@ -114,6 +114,75 @@ func TestResponsesParserRequiresCompletionAndIgnoresReasoning(t *testing.T) {
 	})
 }
 
+func TestProbeStreamSeparatesTransportAndAnswerLimits(t *testing.T) {
+	t.Run("small answer survives SSE overhead above two MiB", func(t *testing.T) {
+		writer := newResponseCapture(context.Background())
+		writer.Header().Set("Content-Type", "text/event-stream")
+		event := `data: {"type":"response.output_text.delta","delta":"x","padding":"` + strings.Repeat("p", 1024) + "\"}\n\n"
+		for range 2048 {
+			_, err := writer.Write([]byte(event))
+			require.NoError(t, err)
+		}
+		_, err := fmt.Fprint(writer, "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n")
+		require.NoError(t, err)
+		result := writer.result()
+		assert.Empty(t, result.ErrorKind)
+		assert.Equal(t, strings.Repeat("x", 2048), result.Text)
+	})
+	t.Run("terminal answer is bounded independently of transport", func(t *testing.T) {
+		writer := newResponseCapture(context.Background())
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, err := fmt.Fprintf(writer, "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":%q}]}]}}\n\n", strings.Repeat("x", 2*1024*1024+1))
+		require.Error(t, err)
+		assert.Equal(t, "output_limit", writer.result().ErrorKind)
+		assert.Empty(t, writer.result().Text)
+	})
+}
+
+func TestProbeResourceLimitsAndUsagePresence(t *testing.T) {
+	for _, tc := range []struct {
+		name, data string
+		frames     int
+		detail     string
+	}{
+		{"oversized unfinished event", "data: " + strings.Repeat("x", 8*1024*1024), 1, "event"},
+		{"bounded total stream including comments", ": " + strings.Repeat("x", 1024*1024) + "\n\n", 32, "transport"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			capture := newResponseCapture(context.Background())
+			defer capture.cancel()
+			capture.Header().Set("Content-Type", "text/event-stream")
+			var err error
+			for range tc.frames {
+				_, err = capture.Write([]byte(tc.data))
+				if err != nil {
+					break
+				}
+			}
+			require.Error(t, err)
+			assert.Equal(t, "output_limit", capture.result().ErrorKind)
+			assert.Contains(t, capture.result().ErrorDetail, tc.detail)
+		})
+	}
+	for _, tc := range []struct{ name, usage, source string }{
+		{"omitted usage remains unknown", "", ""},
+		{"reported zero usage is known", `,"usage":{"input_tokens":0,"output_tokens":0}`, "upstream"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			capture := newResponseCapture(context.Background())
+			defer capture.cancel()
+			_, err := fmt.Fprintf(capture, `{"status":"completed"%s}`, tc.usage)
+			require.NoError(t, err)
+			assert.Empty(t, capture.result().ErrorKind)
+			assert.Equal(t, tc.source, capture.result().UsageSource)
+		})
+	}
+	t.Run("sanitized artifact remains within the persisted size bound", func(t *testing.T) {
+		_, err := sanitizeDrawing(`<svg><text>` + strings.Repeat("x", 2*1024*1024-100) + `</text></svg>`)
+		require.ErrorIs(t, err, errDrawingTooLarge)
+	})
+}
+
 func TestProbeExecutionUsesExistingTokenAndDoesNotRetryWrongAnswers(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -168,6 +237,16 @@ func TestProbeExecutionUsesExistingTokenAndDoesNotRetryWrongAnswers(t *testing.T
 	otherUser.ProbeUserID = 8
 	assert.Equal(t, "configuration", requestResponse(context.Background(), otherUser, target, "question", "").ErrorKind)
 	assert.Equal(t, 1, calls)
+
+	t.Run("oversized response cancels relay context before cleanup", func(t *testing.T) {
+		SetRelayHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(strings.Repeat("x", 2*1024*1024+1)))
+			assert.Error(t, err)
+			assert.Error(t, r.Context().Err(), "the upstream request must be cancelled when capture stops")
+		}))
+		result := requestResponse(context.Background(), config, target, "question", "")
+		assert.Equal(t, "output_limit", result.ErrorKind, "local cancellation must retain the original size-limit cause")
+	})
 
 	// Rejudging uses the persisted expected answer, not today's configuration.
 	run := runs[0]

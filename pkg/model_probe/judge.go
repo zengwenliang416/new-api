@@ -3,6 +3,7 @@ package model_probe
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -73,13 +74,15 @@ var animationAttributes = map[string]bool{
 	"transform": true,
 }
 
+var errDrawingTooLarge = errors.New("drawing exceeds its size limit")
+
 // sanitizeDrawing extracts one SVG and reconstructs an allowlisted document.
 // Scripts, event attributes, foreignObject, external resources and CSS are not
 // copied. SMIL can animate only safe presentation/geometry attributes. The
 // surrounding untrusted HTML is never rendered.
 func sanitizeDrawing(output string) (string, error) {
 	if len(output) > maxResponseBytes {
-		return "", fmt.Errorf("drawing exceeds its size limit")
+		return "", errDrawingTooLarge
 	}
 	start := strings.Index(output, "<svg")
 	if start < 0 {
@@ -189,5 +192,9 @@ parseSVG:
 	if err := encoder.Flush(); err != nil {
 		return "", err
 	}
-	return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}svg{display:block;width:100%;height:100%}</style></head><body>` + out.String() + `</body></html>`, nil
+	artifact := `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}svg{display:block;width:100%;height:100%}</style></head><body>` + out.String() + `</body></html>`
+	if len(artifact) > maxResponseBytes {
+		return "", errDrawingTooLarge
+	}
+	return artifact, nil
 }

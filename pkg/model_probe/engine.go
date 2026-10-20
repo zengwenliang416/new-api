@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -225,6 +226,10 @@ func executeRun(ctx context.Context, taskID, trigger string, config model_probe_
 				if err != nil {
 					run.Status = model.ModelProbeStatusFail
 					run.ErrorKind = "invalid_svg"
+					if errors.Is(err, errDrawingTooLarge) {
+						run.Status, run.ErrorKind = model.ModelProbeStatusError, "output_limit"
+						run.ErrorDetail = "Probe drawing exceeded the artifact size limit"
+					}
 				}
 			}
 			break // A completed wrong answer is never retried.
@@ -284,6 +289,8 @@ func requestResponse(ctx context.Context, config model_probe_setting.ModelProbeS
 	}
 	req.Header.Set("User-Agent", userAgent)
 	writer := newResponseCapture(ctx)
+	defer writer.cancel()
+	req = req.WithContext(writer.ctx)
 	defer func() {
 		if recover() != nil {
 			result = responseResult{ErrorKind: "relay_interrupted"}

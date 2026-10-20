@@ -12,10 +12,15 @@ import (
 	"github.com/QuantumNous/new-api/common"
 )
 
-const maxResponseBytes = 2 * 1024 * 1024
+const (
+	maxResponseBytes = 2 * 1024 * 1024  // Persisted assistant text / SVG.
+	maxStreamBytes   = 32 * 1024 * 1024 // Includes SSE framing and reasoning events.
+	maxEventBytes    = 8 * 1024 * 1024  // Bounds an unfinished SSE event or JSON frame.
+)
 
 type responseResult struct {
 	Text         string
+	UsageSource  string
 	FirstTokenMs int64
 	InputTokens  int64
 	OutputTokens int64
@@ -34,7 +39,7 @@ type responseDocument struct {
 			Text string `json:"text"`
 		} `json:"content"`
 	} `json:"output"`
-	Usage struct {
+	Usage *struct {
 		InputTokens  int64 `json:"input_tokens"`
 		OutputTokens int64 `json:"output_tokens"`
 	} `json:"usage"`
@@ -61,6 +66,7 @@ type responseCapture struct {
 	closeOnce  sync.Once
 	closed     chan bool
 	ctx        context.Context
+	cancel     context.CancelFunc
 	header     http.Header
 	status     int
 	started    time.Time
@@ -78,7 +84,8 @@ type responseCapture struct {
 }
 
 func newResponseCapture(ctx context.Context) *responseCapture {
-	return &responseCapture{ctx: ctx, header: make(http.Header), started: time.Now(), closed: make(chan bool, 1)}
+	ctx, cancel := context.WithCancel(ctx)
+	return &responseCapture{ctx: ctx, cancel: cancel, header: make(http.Header), started: time.Now(), closed: make(chan bool, 1)}
 }
 func (w *responseCapture) Header() http.Header { return w.header }
 func (w *responseCapture) CloseNotify() <-chan bool {
@@ -109,11 +116,13 @@ func (w *responseCapture) Write(p []byte) (int, error) {
 		w.status = http.StatusOK
 	}
 	w.total += len(p)
-	if w.total > maxResponseBytes {
-		w.tooLarge = true
-		return 0, fmt.Errorf("probe output exceeded its size limit")
+	if w.total > maxStreamBytes {
+		return 0, w.rejectLimit("Probe stream exceeded the transport size limit")
 	}
 	if !strings.Contains(w.header.Get("Content-Type"), "text/event-stream") {
+		if w.body.Len()+len(p) > maxResponseBytes {
+			return 0, w.rejectLimit("Probe response exceeded the answer size limit")
+		}
 		return w.body.Write(p)
 	}
 	w.pending = append(w.pending, p...)
@@ -123,6 +132,9 @@ func (w *responseCapture) Write(p []byte) (int, error) {
 			break
 		}
 		w.pending = rest
+		if len(line)+len(w.data) > maxEventBytes {
+			return 0, w.rejectLimit("Probe stream event exceeded its size limit")
+		}
 		line = bytes.TrimSuffix(line, []byte{'\r'})
 		if len(line) == 0 {
 			w.consumeEvent()
@@ -136,11 +148,25 @@ func (w *responseCapture) Write(p []byte) (int, error) {
 			w.data = append(w.data, value...)
 		}
 	}
+	if len(w.pending)+len(w.data) > maxEventBytes {
+		return 0, w.rejectLimit("Probe stream event exceeded its size limit")
+	}
+	if w.tooLarge {
+		return 0, fmt.Errorf("probe output exceeded its size limit")
+	}
 	return len(p), nil
 }
 
+// Stop the upstream request immediately, retaining the original limit cause.
+func (w *responseCapture) rejectLimit(detail string) error {
+	w.tooLarge = true
+	w.response.ErrorDetail = detail
+	w.cancel()
+	return fmt.Errorf("probe output exceeded its size limit")
+}
+
 func (w *responseCapture) consumeEvent() {
-	if len(w.data) == 0 {
+	if w.tooLarge || len(w.data) == 0 {
 		return
 	}
 	data := w.data
@@ -167,6 +193,10 @@ func (w *responseCapture) consumeEvent() {
 		if !w.firstToken && event.Delta != "" {
 			w.firstToken = true
 			w.response.FirstTokenMs = time.Since(w.started).Milliseconds()
+		}
+		if w.output.Len()+len(event.Delta) > maxResponseBytes {
+			_ = w.rejectLimit("Probe response exceeded the answer size limit")
+			return
 		}
 		w.output.WriteString(event.Delta)
 	case "response.completed", "response.done":
@@ -208,6 +238,10 @@ func (w *responseCapture) applyDocument(document responseDocument) {
 				if text.Len() > 0 {
 					text.WriteByte('\n')
 				}
+				if text.Len()+len(content.Text) > maxResponseBytes {
+					_ = w.rejectLimit("Probe response exceeded the answer size limit")
+					return
+				}
 				text.WriteString(content.Text)
 			}
 		}
@@ -216,8 +250,11 @@ func (w *responseCapture) applyDocument(document responseDocument) {
 		w.output.Reset()
 		w.output.WriteString(text.String())
 	}
-	w.response.InputTokens = max(document.Usage.InputTokens, 0)
-	w.response.OutputTokens = max(document.Usage.OutputTokens, 0)
+	if document.Usage != nil {
+		w.response.InputTokens = max(document.Usage.InputTokens, 0)
+		w.response.OutputTokens = max(document.Usage.OutputTokens, 0)
+		w.response.UsageSource = "upstream"
+	}
 }
 
 func (w *responseCapture) result() responseResult {
@@ -246,14 +283,15 @@ func (w *responseCapture) result() responseResult {
 	}
 	w.response.Text = w.output.String()
 	switch {
-	case w.ctx.Err() != nil:
-		w.response.ErrorKind, w.response.Retryable = "timeout", false
 	case w.tooLarge:
 		w.response.ErrorKind, w.response.Retryable = "output_limit", false
+	case w.ctx.Err() != nil:
+		w.response.ErrorKind, w.response.Retryable = "timeout", false
 	case w.status < 200 || w.status >= 300:
 		w.response.ErrorKind = "http_error"
 		w.response.ErrorDetail = fmt.Sprintf("Relay returned HTTP %d", w.status)
 		w.response.Retryable = w.status == http.StatusTooManyRequests || w.status >= 500
+
 	case w.parseErr:
 		w.response.ErrorKind, w.response.Retryable = "invalid_response", false
 	case w.failed:
