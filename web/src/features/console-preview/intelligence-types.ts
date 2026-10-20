@@ -57,6 +57,12 @@ export interface ProbeTarget {
 }
 
 export interface ProbeOverview {
+  execution?: {
+    status: string
+    updated_at: number
+    readiness_error?: string
+    summary?: { pass: number; fail: number; error: number; skipped: number }
+  }
   enabled: boolean
   targets: ProbeTarget[]
   server_now: number
@@ -76,6 +82,10 @@ export interface ProbeRun {
   started_at: number
   latency_ms: number
   first_token_ms: number
+  usage_source?: string
+  consumed_quota?: number | null
+  request_ids?: string[]
+  error_detail?: string
   prompt_tokens: number
   completion_tokens: number
   attempts: number

@@ -328,6 +328,56 @@ describe('live intelligence monitoring', () => {
     }
   )
 
+  it('shows the admin credential blocker even when no new check was created', async () => {
+    useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role: 10 })
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          ...overview,
+          execution: {
+            status: 'failed',
+            updated_at: 1700000000,
+            readiness_error:
+              'Probe token quota is exhausted. Refill its quota and enable it before retrying.',
+          },
+        },
+      },
+    })
+    renderPage()
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Probe token quota is exhausted')
+    expect(screen.getByRole('button', { name: 'Check now' })).toBeDisabled()
+  })
+
+  it('shows unknown usage for an interrupted check instead of zero tokens', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url) => ({
+      data: {
+        success: true,
+        data:
+          url === '/api/model_probe/runs/42'
+            ? {
+                ...run,
+                status: 'error',
+                error_kind: 'timeout',
+                prompt_tokens: 0,
+                completion_tokens: 0,
+              }
+            : overview,
+      },
+    }))
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /Failed/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Check details' })
+    expect(await within(dialog).findAllByText('Unknown')).toHaveLength(2)
+    expect(
+      within(dialog).getByText(
+        'Missing usage does not mean this request was free.'
+      )
+    ).toBeVisible()
+  })
+
   it('renders successful drawings in an opaque sandbox with no scripts or same-origin access', async () => {
     const slot = {
       ts: 1700000000,

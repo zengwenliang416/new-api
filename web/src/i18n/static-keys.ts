@@ -19,6 +19,19 @@ For commercial licensing, please contact support@quantumnous.com
 // Static translation keys that don't get picked up by the t('...') regex.
 // These cover dynamic labels (e.g. constants, configs) that are passed into t at runtime.
 export const STATIC_I18N_KEYS = [
+  'Probe drawing exceeded the artifact size limit',
+  // Safe model-probe diagnostics returned by the server.
+  'Probe token must belong to the selected user and group.',
+  'Probe token is disabled. Enable it before retrying.',
+  'Probe token has expired. Renew it before retrying.',
+  'Probe token quota is exhausted. Refill its quota and enable it before retrying.',
+  'Probe token is unavailable. Select an active token.',
+  'Probe account has insufficient balance or subscription quota.',
+  'Probe stream exceeded the transport size limit',
+  'Probe stream event exceeded its size limit',
+  'Probe response exceeded the answer size limit',
+  'select an active ordinary user for model probes',
+  'probe targets require a configured explicit group',
   'Task usage metadata is unavailable. Pricing details cannot be displayed.',
   'This expression cannot be expanded into a price table. View the original expression below.',
   'This operation is only supported for vLLM or SGLang channels',

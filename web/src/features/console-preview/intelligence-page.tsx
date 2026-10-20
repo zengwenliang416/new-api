@@ -27,6 +27,7 @@ import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
 import { LoadingState } from '@/components/loading-state'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -110,11 +111,14 @@ export function IntelligencePage() {
     (data?.server_now ?? 0) +
     Math.max(0, Math.floor((now - overview.dataUpdatedAt) / 1000))
   const secondsUntilNext = Math.max(0, (data?.next_run_ts ?? 0) - serverNow)
-  const running = targets.some(
-    (target) =>
-      target.math.latest?.status === 'running' ||
-      target.drawing.latest?.status === 'running'
-  )
+  const running =
+    data?.execution?.status === 'running' ||
+    data?.execution?.status === 'pending' ||
+    targets.some(
+      (target) =>
+        target.math.latest?.status === 'running' ||
+        target.drawing.latest?.status === 'running'
+    )
   let nextCheck = '—'
   if (data?.enabled && data.next_run_ts > 0) {
     nextCheck = `${Math.floor(secondsUntilNext / 60)}:${String(secondsUntilNext % 60).padStart(2, '0')}`
@@ -138,7 +142,11 @@ export function IntelligencePage() {
             variant='outline'
             size='sm'
             disabled={
-              !data?.enabled || targets.length === 0 || run.isPending || running
+              !data?.enabled ||
+              targets.length === 0 ||
+              run.isPending ||
+              running ||
+              Boolean(data?.execution?.readiness_error)
             }
             onClick={() => run.mutate()}
           >
@@ -178,6 +186,40 @@ export function IntelligencePage() {
           )}
           {data && (
             <>
+              {isAdmin &&
+                data.execution &&
+                (data.execution.readiness_error ||
+                  data.execution.status === 'failed') && (
+                  <Alert variant='destructive'>
+                    <AlertTitle>{t('Checks need attention')}</AlertTitle>
+                    <AlertDescription>
+                      {data.execution.readiness_error
+                        ? t(data.execution.readiness_error)
+                        : t(
+                            'The last monitoring task failed. Review the check details and system task records.'
+                          )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              {isAdmin && data.execution?.summary && (
+                <p role='status' className='text-muted-foreground text-xs'>
+                  {t(
+                    'Last task results: {{passed}} passed, {{failed}} failed, {{errors}} request errors, {{skipped}} skipped.',
+                    {
+                      passed: formatNumber(data.execution.summary.pass, locale),
+                      failed: formatNumber(data.execution.summary.fail, locale),
+                      errors: formatNumber(
+                        data.execution.summary.error,
+                        locale
+                      ),
+                      skipped: formatNumber(
+                        data.execution.summary.skipped,
+                        locale
+                      ),
+                    }
+                  )}
+                </p>
+              )}
               {!data.enabled && (
                 <div
                   role='status'

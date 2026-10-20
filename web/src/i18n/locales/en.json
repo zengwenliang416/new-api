@@ -7863,6 +7863,25 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Probe token must belong to the selected user and group.": "Probe token must belong to the selected user and group.",
+    "Probe token is disabled. Enable it before retrying.": "Probe token is disabled. Enable it before retrying.",
+    "Probe token has expired. Renew it before retrying.": "Probe token has expired. Renew it before retrying.",
+    "Probe token quota is exhausted. Refill its quota and enable it before retrying.": "Probe token quota is exhausted. Refill its quota and enable it before retrying.",
+    "Probe token is unavailable. Select an active token.": "Probe token is unavailable. Select an active token.",
+    "Probe account has insufficient balance or subscription quota.": "Probe account has insufficient balance or subscription quota.",
+    "Probe stream exceeded the transport size limit": "Probe stream exceeded the transport size limit",
+    "Probe stream event exceeded its size limit": "Probe stream event exceeded its size limit",
+    "Probe response exceeded the answer size limit": "Probe response exceeded the answer size limit",
+    "select an active ordinary user for model probes": "select an active ordinary user for model probes",
+    "probe targets require a configured explicit group": "probe targets require a configured explicit group",
+    "Checks need attention": "Checks need attention",
+    "The last monitoring task failed. Review the check details and system task records.": "The last monitoring task failed. Review the check details and system task records.",
+    "Last task results: {{passed}} passed, {{failed}} failed, {{errors}} request errors, {{skipped}} skipped.": "Last task results: {{passed}} passed, {{failed}} failed, {{errors}} request errors, {{skipped}} skipped.",
+    "Missing usage does not mean this request was free.": "Missing usage does not mean this request was free.",
+    "Usage is incomplete across attempts. The actual charge may be higher.": "Usage is incomplete across attempts. The actual charge may be higher.",
+    "Token counts come from relay billing records and may include estimates.": "Token counts come from relay billing records and may include estimates.",
+    "Recorded charge": "Recorded charge",
+    "Probe drawing exceeded the artifact size limit": "Probe drawing exceeded the artifact size limit"
   }
 }

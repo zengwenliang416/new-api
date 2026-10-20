@@ -25,6 +25,7 @@ import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toIntlLocale } from '@/i18n/languages'
+import { formatQuotaWithCurrency } from '@/lib/currency'
 import { formatNumber, formatTimestamp } from '@/lib/format'
 
 import { getProbeRun } from '../intelligence-api'
@@ -51,6 +52,10 @@ export function IntelligenceRunDialog(props: {
       query.state.data?.status === 'running' ? 3000 : false,
   })
   const data = run.data
+  const usageKnown =
+    Boolean(data?.usage_source) ||
+    (data?.prompt_tokens ?? 0) > 0 ||
+    (data?.completion_tokens ?? 0) > 0
 
   return (
     <Dialog
@@ -89,11 +94,19 @@ export function IntelligenceRunDialog(props: {
           <dl className='grid grid-cols-2 gap-3 text-xs sm:grid-cols-4'>
             <div>
               <dt className='text-muted-foreground'>{t('Input tokens')}</dt>
-              <dd>{formatNumber(data.prompt_tokens, locale)}</dd>
+              <dd>
+                {usageKnown
+                  ? formatNumber(data.prompt_tokens, locale)
+                  : t('Unknown')}
+              </dd>
             </div>
             <div>
               <dt className='text-muted-foreground'>{t('Output tokens')}</dt>
-              <dd>{formatNumber(data.completion_tokens, locale)}</dd>
+              <dd>
+                {usageKnown
+                  ? formatNumber(data.completion_tokens, locale)
+                  : t('Unknown')}
+              </dd>
             </div>
             <div>
               <dt className='text-muted-foreground'>{t('Attempts')}</dt>
@@ -104,6 +117,40 @@ export function IntelligenceRunDialog(props: {
               <dd>{data.effort || '—'}</dd>
             </div>
           </dl>
+          {!usageKnown && (
+            <p className='text-muted-foreground text-xs'>
+              {t('Missing usage does not mean this request was free.')}
+            </p>
+          )}
+          {data.usage_source === 'partial' && (
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Usage is incomplete across attempts. The actual charge may be higher.'
+              )}
+            </p>
+          )}
+          {data.usage_source === 'billing_log' && (
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Token counts come from relay billing records and may include estimates.'
+              )}
+            </p>
+          )}
+          {'consumed_quota' in data && (
+            <p className='text-sm'>
+              {t('Recorded charge')}:{' '}
+              {data.consumed_quota == null
+                ? t('Unknown')
+                : formatQuotaWithCurrency(data.consumed_quota, {
+                    digitsSmall: 6,
+                    digitsLarge: 6,
+                    locale,
+                  })}
+            </p>
+          )}
+          {data.error_detail && (
+            <p className='text-sm'>{t(data.error_detail)}</p>
+          )}
           {data.status === 'error' && (
             <p
               role='status'

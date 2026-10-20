@@ -7863,6 +7863,25 @@
     "Zhipu": "智谱",
     "Zhipu GLM": "智谱GLM",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Probe token must belong to the selected user and group.": "检测令牌必须属于所选用户和分组。",
+    "Probe token is disabled. Enable it before retrying.": "检测令牌已禁用，请启用后重试。",
+    "Probe token has expired. Renew it before retrying.": "检测令牌已过期，请延长有效期后重试。",
+    "Probe token quota is exhausted. Refill its quota and enable it before retrying.": "检测令牌额度已耗尽，请补充额度并启用令牌后重试。",
+    "Probe token is unavailable. Select an active token.": "检测令牌不可用，请选择有效令牌。",
+    "Probe account has insufficient balance or subscription quota.": "检测账号余额或订阅额度不足。",
+    "Probe stream exceeded the transport size limit": "检测响应超过流式传输大小上限",
+    "Probe stream event exceeded its size limit": "检测响应中的单个流事件超过大小上限",
+    "Probe response exceeded the answer size limit": "检测回答超过正文大小上限",
+    "select an active ordinary user for model probes": "请选择有效的普通用户作为检测账号",
+    "probe targets require a configured explicit group": "检测目标必须使用已配置的明确分组",
+    "Checks need attention": "检测需要处理",
+    "The last monitoring task failed. Review the check details and system task records.": "上一轮检测任务失败，请查看检测详情和系统任务记录。",
+    "Last task results: {{passed}} passed, {{failed}} failed, {{errors}} request errors, {{skipped}} skipped.": "上一轮结果：通过 {{passed}} 项，未通过 {{failed}} 项，请求错误 {{errors}} 项，跳过 {{skipped}} 项。",
+    "Missing usage does not mean this request was free.": "用量未知不代表本次请求没有产生费用。",
+    "Usage is incomplete across attempts. The actual charge may be higher.": "部分尝试缺少用量记录，实际费用可能更高。",
+    "Token counts come from relay billing records and may include estimates.": "Token 数来自中转站计费记录，可能包含估算值。",
+    "Recorded charge": "已记录费用",
+    "Probe drawing exceeded the artifact size limit": "检测绘图超过文件大小上限"
   }
 }
