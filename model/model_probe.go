@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 
@@ -32,9 +33,29 @@ func ValidateModelProbeIdentity(value model_probe_setting.ModelProbeSetting) err
 			return fmt.Errorf("probe targets require a configured explicit group")
 		}
 		var token Token
-		if err := DB.Select("id", "user_id", "status", "expired_time", commonGroupCol).First(&token, target.TokenID).Error; err != nil || token.UserId != value.ProbeUserID || token.Group != target.Group || token.Status != common.TokenStatusEnabled || (token.ExpiredTime != -1 && token.ExpiredTime <= common.GetTimestamp()) {
-			return fmt.Errorf("each enabled target requires an active token belonging to the selected user and group")
+		if err := DB.Select("id", "user_id", "status", "expired_time", "remain_quota", "unlimited_quota", commonGroupCol).First(&token, target.TokenID).Error; err != nil || token.UserId != value.ProbeUserID || token.Group != target.Group {
+			return fmt.Errorf("Probe token must belong to the selected user and group.")
 		}
+		if err := ValidateModelProbeToken(&token); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ValidateModelProbeToken(token *Token) error {
+	if token == nil {
+		return fmt.Errorf("Probe token is unavailable. Select an active token.")
+	}
+	switch {
+	case token.Status == common.TokenStatusDisabled:
+		return fmt.Errorf("Probe token is disabled. Enable it before retrying.")
+	case token.Status == common.TokenStatusExpired || (token.ExpiredTime != -1 && token.ExpiredTime <= common.GetTimestamp()):
+		return fmt.Errorf("Probe token has expired. Renew it before retrying.")
+	case token.Status == common.TokenStatusExhausted || (!token.UnlimitedQuota && token.RemainQuota <= 0):
+		return fmt.Errorf("Probe token quota is exhausted. Refill its quota and enable it before retrying.")
+	case token.Status != common.TokenStatusEnabled:
+		return fmt.Errorf("Probe token is unavailable. Select an active token.")
 	}
 	return nil
 }
@@ -102,6 +123,9 @@ type ModelProbeRun struct {
 	FirstTokenMs           int64  `json:"first_token_ms"`
 	PromptTokens           int64  `json:"prompt_tokens"`
 	CompletionTokens       int64  `json:"completion_tokens"`
+	UsageSource            string `json:"usage_source" gorm:"size:16"`
+	ConsumedQuota          *int64 `json:"-"`
+	RequestIDs             string `json:"-" gorm:"type:text"`
 	Attempts               int    `json:"attempts"`
 	Answer                 string `json:"answer" gorm:"size:128"`
 	Prompt                 string `json:"prompt" gorm:"size:2097152"`
@@ -171,6 +195,9 @@ func FinishModelProbeRun(run *ModelProbeRun) (bool, error) {
 	if run.FinishedAt < run.StartedAt || run.LatencyMs < 0 || run.FirstTokenMs < 0 || run.PromptTokens < 0 || run.CompletionTokens < 0 || run.Attempts < 0 {
 		return false, fmt.Errorf("invalid probe result metrics")
 	}
+	if !slices.Contains([]string{"", "upstream", "billing_log", "mixed", "partial"}, run.UsageSource) || len(run.RequestIDs) > 1024 || (run.ConsumedQuota != nil && *run.ConsumedQuota < 0) {
+		return false, fmt.Errorf("invalid probe usage observation")
+	}
 	if len(run.OutputText) > 2*1024*1024 || len(run.ArtifactHTML) > 2*1024*1024 || len(run.Answer) > 128 {
 		return false, fmt.Errorf("probe result exceeds its storage limit")
 	}
@@ -180,6 +207,7 @@ func FinishModelProbeRun(run *ModelProbeRun) (bool, error) {
 			"status": run.Status, "finished_at": run.FinishedAt,
 			"latency_ms": run.LatencyMs, "first_token_ms": run.FirstTokenMs,
 			"prompt_tokens": run.PromptTokens, "completion_tokens": run.CompletionTokens,
+			"usage_source": run.UsageSource, "consumed_quota": run.ConsumedQuota, "request_ids": run.RequestIDs,
 			"attempts": run.Attempts, "answer": run.Answer, "output_text": run.OutputText,
 			"artifact_html": run.ArtifactHTML, "artifact_bytes": len(run.ArtifactHTML),
 			"error_kind": run.ErrorKind, "error_detail": run.ErrorDetail,
@@ -272,4 +300,26 @@ func DeleteModelProbeRunsBefore(cutoff int64) error {
 		return nil
 	}
 	return DB.Where("started_at < ? AND status <> ?", cutoff, ModelProbeStatusRunning).Delete(&ModelProbeRun{}).Error
+}
+
+// ModelProbeBilledUsage reads only numeric accounting facts for the exact
+// authenticated request. Log storage may be separate (including ClickHouse).
+// No log or disabled logging means unknown, never zero cost.
+func ModelProbeBilledUsage(requestID string, userID, tokenID int) (input, output int64, quota *int64, err error) {
+	if requestID == "" || LOG_DB == nil || !common.LogConsumeEnabled {
+		return
+	}
+	var logs []Log
+	err = LOG_DB.Select("prompt_tokens", "completion_tokens", "quota").
+		Where("request_id = ? AND user_id = ? AND token_id = ? AND type = ?", requestID, userID, tokenID, LogTypeConsume).Find(&logs).Error
+	if err != nil || len(logs) == 0 {
+		return
+	}
+	total := int64(0)
+	for _, log := range logs {
+		input += min(max(int64(log.PromptTokens), 0), math.MaxInt64-input)
+		output += min(max(int64(log.CompletionTokens), 0), math.MaxInt64-output)
+		total += min(max(int64(log.Quota), 0), math.MaxInt64-total)
+	}
+	return input, output, &total, nil
 }

@@ -63,6 +63,13 @@ func SetRelayHandler(handler http.Handler) {
 }
 
 type Handler struct{}
+type RunSummary struct {
+	Pass    int `json:"pass"`
+	Fail    int `json:"fail"`
+	Error   int `json:"error"`
+	Skipped int `json:"skipped"`
+}
+
 type taskPayload struct {
 	Trigger string `json:"trigger"`
 }
@@ -96,15 +103,19 @@ func StartRun() (*model.SystemTask, bool, error) {
 
 func (Handler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	var runErr error
+	summary := RunSummary{}
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			runErr = fmt.Errorf("probe execution interrupted")
 		}
 		status, detail := model.SystemTaskStatusSucceeded, ""
+		if runErr == nil && summary.Error > 0 {
+			runErr = fmt.Errorf("%d probe requests failed; inspect check details", summary.Error)
+		}
 		if runErr != nil {
 			status, detail = model.SystemTaskStatusFailed, runErr.Error()
 		}
-		if err := model.FinishSystemTask(task.TaskID, runnerID, status, nil, detail); err != nil {
+		if err := model.FinishSystemTask(task.TaskID, runnerID, status, summary, detail); err != nil {
 			common.SysError("model probe task could not be finalized")
 		}
 	}()
@@ -155,8 +166,22 @@ func (Handler) Run(ctx context.Context, task *model.SystemTask, runnerID string)
 				runErr = fmt.Errorf("model probes disabled during execution")
 				return
 			}
-			if runErr = executeRun(ctx, task.TaskID, payload.Trigger, config, target, kind); runErr != nil {
+			var completed *model.ModelProbeRun
+			completed, runErr = executeRun(ctx, task.TaskID, payload.Trigger, config, target, kind)
+			if runErr != nil {
 				return
+			}
+			if completed == nil {
+				summary.Skipped++
+			} else {
+				switch completed.Status {
+				case model.ModelProbeStatusPass:
+					summary.Pass++
+				case model.ModelProbeStatusFail:
+					summary.Fail++
+				case model.ModelProbeStatusError:
+					summary.Error++
+				}
 			}
 			processed++
 			progress(processed, total)
@@ -168,7 +193,7 @@ func targetKey(target model_probe_setting.Target) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(target.Group+"\x00"+target.Model+"\x00"+target.Effort)))
 }
 
-func executeRun(ctx context.Context, taskID, trigger string, config model_probe_setting.ModelProbeSetting, target model_probe_setting.Target, kind string) error {
+func executeRun(ctx context.Context, taskID, trigger string, config model_probe_setting.ModelProbeSetting, target model_probe_setting.Target, kind string) (*model.ModelProbeRun, error) {
 	defaults := Defaults()
 	prompt, expected := config.MathPrompt, config.MathAnswer
 	vehicle, scene := "", ""
@@ -200,18 +225,39 @@ func executeRun(ctx context.Context, taskID, trigger string, config model_probe_
 	}
 	claimed, err := model.ClaimModelProbeRun(&run)
 	if err != nil || !claimed {
-		return err
+		return nil, err
 	}
 	started := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(config.TimeoutSeconds)*time.Second)
 	defer cancel()
 	run.Status = model.ModelProbeStatusError
+	requestIDs := []string{}
+	allUsageKnown, allBillingKnown := true, true
+	totalQuota := int64(0)
 	for attempt := 1; attempt <= config.MaxAttempts; attempt++ {
 		if ctx.Err() != nil {
 			run.ErrorKind = "timeout"
 			break
 		}
 		result := requestResponse(ctx, config, target, prompt, instructions)
+		if result.RequestID != "" {
+			requestIDs = append(requestIDs, result.RequestID)
+		}
+		if result.UsageSource == "" {
+			allUsageKnown = false
+		}
+		if result.UsageSource != "" {
+			if run.UsageSource == "" {
+				run.UsageSource = result.UsageSource
+			} else if run.UsageSource != result.UsageSource {
+				run.UsageSource = "mixed"
+			}
+		}
+		if result.Quota == nil {
+			allBillingKnown = false
+		} else {
+			totalQuota += min(*result.Quota, math.MaxInt64-totalQuota)
+		}
 		run.Attempts = attempt
 		run.OutputText, run.FirstTokenMs = result.Text, result.FirstTokenMs
 		run.PromptTokens += min(result.InputTokens, math.MaxInt64-run.PromptTokens)
@@ -243,9 +289,20 @@ func executeRun(ctx context.Context, taskID, trigger string, config model_probe_
 		case <-time.After(time.Duration(attempt) * time.Second):
 		}
 	}
+	if !allUsageKnown && run.UsageSource != "" {
+		run.UsageSource = "partial"
+	}
+	if allBillingKnown && run.Attempts > 0 {
+		run.ConsumedQuota = &totalQuota
+	}
+	encodedIDs, err := common.Marshal(requestIDs)
+	if err != nil {
+		return &run, err
+	}
+	run.RequestIDs = string(encodedIDs)
 	run.LatencyMs, run.FinishedAt = time.Since(started).Milliseconds(), time.Now().Unix()
 	_, err = model.FinishModelProbeRun(&run)
-	return err
+	return &run, err
 }
 
 func requestResponse(ctx context.Context, config model_probe_setting.ModelProbeSetting, target model_probe_setting.Target, prompt, instructions string) (result responseResult) {
@@ -259,6 +316,9 @@ func requestResponse(ctx context.Context, config model_probe_setting.ModelProbeS
 	token, err := model.GetTokenByIds(target.TokenID, config.ProbeUserID)
 	if err != nil || token == nil || token.UserId != config.ProbeUserID || token.Group != target.Group || target.Group == "auto" {
 		return responseResult{ErrorKind: "configuration", ErrorDetail: "Probe token must belong to the configured user and exact non-auto group"}
+	}
+	if err := model.ValidateModelProbeToken(token); err != nil {
+		return responseResult{ErrorKind: "credential", ErrorDetail: err.Error()}
 	}
 	relay.RLock()
 	handler := relay.handler
@@ -300,7 +360,17 @@ func requestResponse(ctx context.Context, config model_probe_setting.ModelProbeS
 	// settlement and cleanup. Do not release the task lease or start another
 	// target until that handler has returned.
 	handler.ServeHTTP(writer, req)
-	return writer.result()
+	result = writer.result()
+	result.RequestID = writer.Header().Get(common.RequestIdKey)
+	input, output, quota, usageErr := model.ModelProbeBilledUsage(result.RequestID, config.ProbeUserID, target.TokenID)
+	if usageErr != nil {
+		common.SysError("model probe billing observation unavailable")
+	}
+	if quota != nil {
+		result.InputTokens, result.OutputTokens = input, output
+		result.Quota, result.UsageSource = quota, "billing_log"
+	}
+	return result
 }
 
 func GetRun(id int64) (*model.ModelProbeRun, error) {

@@ -194,7 +194,7 @@ func TestProbeExecutionUsesExistingTokenAndDoesNotRetryWrongAnswers(t *testing.T
 	t.Cleanup(func() { model.DB = previous; SetRelayHandler(nil); require.NoError(t, sqlDB.Close()) })
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.ModelProbeRun{}))
 	require.NoError(t, db.Create(&model.User{Id: 7, Username: "probe-user", Role: common.RoleCommonUser, Status: common.UserStatusEnabled}).Error)
-	token := model.Token{UserId: 7, Key: "test_probe_key", Group: "test-group"}
+	token := model.Token{UserId: 7, Key: "test_probe_key", Group: "test-group", UnlimitedQuota: true}
 	require.NoError(t, db.Create(&token).Error)
 	config := model_probe_setting.ModelProbeSetting{ProbeUserID: 7, TimeoutSeconds: 30, MaxAttempts: 2, MathAnswer: "21"}
 	target := model_probe_setting.Target{Group: "test-group", Model: "test-model", Effort: "medium", TokenID: token.Id, Enabled: true, Kinds: []string{"math"}}
@@ -212,7 +212,8 @@ func TestProbeExecutionUsesExistingTokenAndDoesNotRetryWrongAnswers(t *testing.T
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"20\"}]}],\"usage\":{\"input_tokens\":10,\"output_tokens\":2}}}\n\n")
 	}))
-	require.NoError(t, executeRun(context.Background(), "task-one", "manual", config, target, "math"))
+	_, err = executeRun(context.Background(), "task-one", "manual", config, target, "math")
+	require.NoError(t, err)
 	assert.Equal(t, 1, calls)
 	runs, err := model.ListModelProbeRuns(model.ModelProbeRunFilter{IncludeContent: true})
 	require.NoError(t, err)
@@ -224,7 +225,8 @@ func TestProbeExecutionUsesExistingTokenAndDoesNotRetryWrongAnswers(t *testing.T
 	assert.Equal(t, int64(10), runs[0].PromptTokens)
 	assert.Equal(t, 1, runs[0].Attempts)
 	// A claimed task/kind slot is not executed twice, even after completion.
-	require.NoError(t, executeRun(context.Background(), "task-one", "manual", config, target, "math"))
+	_, err = executeRun(context.Background(), "task-one", "manual", config, target, "math")
+	require.NoError(t, err)
 	assert.Equal(t, 1, calls)
 
 	for _, bad := range []model_probe_setting.Target{
@@ -297,6 +299,12 @@ func TestProbeExecutionUsesExistingTokenAndDoesNotRetryWrongAnswers(t *testing.T
 	}
 	assert.Equal(t, "timeout", timed.ErrorKind)
 	assert.False(t, timed.Retryable)
+
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", token.Id).Update("status", common.TokenStatusExhausted).Error)
+	resultAfterExhaustion := requestResponse(context.Background(), config, target, "question", "")
+	assert.Equal(t, "credential", resultAfterExhaustion.ErrorKind)
+	assert.Contains(t, resultAfterExhaustion.ErrorDetail, "quota is exhausted")
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", token.Id).Update("status", common.TokenStatusEnabled).Error)
 
 	// A user promoted to admin or disabled after configuration cannot be used
 	// as an execution identity. This guard also runs between attempts.

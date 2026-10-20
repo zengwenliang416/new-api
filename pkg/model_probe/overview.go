@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/model_probe_setting"
@@ -51,7 +52,15 @@ type TargetOverview struct {
 	Drawing          KindStats `json:"drawing"`
 }
 
+type ExecutionStatus struct {
+	Status         model.SystemTaskStatus `json:"status"`
+	UpdatedAt      int64                  `json:"updated_at"`
+	Summary        *RunSummary            `json:"summary,omitempty"`
+	ReadinessError string                 `json:"readiness_error,omitempty"`
+}
+
 type OverviewData struct {
+	Execution       *ExecutionStatus `json:"execution,omitempty"`
 	Enabled         bool             `json:"enabled"`
 	ServerNow       int64            `json:"server_now"`
 	NextRunTs       int64            `json:"next_run_ts"`
@@ -158,6 +167,21 @@ func Overview(hours int, groups []string) (*OverviewData, error) {
 		latest, err := model.GetLatestSystemTasks([]string{TaskType})
 		if err != nil {
 			return nil, err
+		}
+		if groups == nil {
+			data.Execution = &ExecutionStatus{}
+			if err := model.ValidateModelProbeIdentity(config); err != nil {
+				data.Execution.ReadinessError = err.Error()
+			}
+			if task := latest[TaskType]; task != nil {
+				data.Execution.Status, data.Execution.UpdatedAt = task.Status, task.UpdatedAt
+				if task.Result != "" && task.Result != "null" {
+					var summary RunSummary
+					if common.UnmarshalJsonStr(task.Result, &summary) == nil {
+						data.Execution.Summary = &summary
+					}
+				}
+			}
 		}
 		if task := latest[TaskType]; task == nil {
 			data.NextRunTs = now

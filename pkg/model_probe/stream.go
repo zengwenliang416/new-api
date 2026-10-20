@@ -21,6 +21,8 @@ const (
 type responseResult struct {
 	Text         string
 	UsageSource  string
+	Quota        *int64
+	RequestID    string
 	FirstTokenMs int64
 	InputTokens  int64
 	OutputTokens int64
@@ -291,7 +293,16 @@ func (w *responseCapture) result() responseResult {
 		w.response.ErrorKind = "http_error"
 		w.response.ErrorDetail = fmt.Sprintf("Relay returned HTTP %d", w.status)
 		w.response.Retryable = w.status == http.StatusTooManyRequests || w.status >= 500
-
+		var failure struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if common.Unmarshal(w.body.Bytes(), &failure) == nil && failure.Error.Code == "insufficient_user_quota" {
+			w.response.ErrorKind = "account_quota"
+			w.response.ErrorDetail = "Probe account has insufficient balance or subscription quota."
+			w.response.Retryable = false
+		}
 	case w.parseErr:
 		w.response.ErrorKind, w.response.Retryable = "invalid_response", false
 	case w.failed:

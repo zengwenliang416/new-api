@@ -182,6 +182,69 @@ func TestModelProbeStoreDatabaseMatrix(t *testing.T) {
 			require.Len(t, runs, 1)
 			assert.Equal(t, active.ID, runs[0].ID, "retention does not delete an in-flight execution")
 
+			t.Run("upgrade_probe_observation_metadata_preserves_old_runs", func(t *testing.T) {
+				var before []ModelProbeRun
+				require.NoError(t, db.Order("id").Find(&before).Error)
+				require.NotEmpty(t, before)
+				for _, column := range []string{"UsageSource", "ConsumedQuota", "RequestIDs"} {
+					require.NoError(t, db.Migrator().DropColumn(&ModelProbeRun{}, column))
+				}
+				for range 2 {
+					require.NoError(t, db.AutoMigrate(&ModelProbeRun{}))
+				}
+				// A real upgrade starts a new process; discard PostgreSQL's cached
+				// SELECT * plan after dropping/re-adding legacy columns in this fixture.
+				if dialect == "postgres" {
+					sqlDB.SetMaxIdleConns(0)
+					sqlDB.SetMaxIdleConns(1)
+				}
+				var after []ModelProbeRun
+				require.NoError(t, db.Order("id").Find(&after).Error)
+				assert.Equal(t, before, after, "existing rows and unknown billing survive repeated upgrades")
+				quota := int64(123)
+				require.NoError(t, db.Model(&ModelProbeRun{}).Where("id = ?", after[0].ID).Updates(map[string]any{
+					"usage_source": "billing_log", "consumed_quota": &quota, "request_ids": `["req-probe"]`,
+				}).Error)
+				require.NoError(t, db.AutoMigrate(&ModelProbeRun{}))
+				saved, err := GetModelProbeRun(after[0].ID)
+				require.NoError(t, err)
+				assert.Equal(t, &quota, saved.ConsumedQuota)
+				assert.Equal(t, "billing_log", saved.UsageSource)
+				assert.Equal(t, `["req-probe"]`, saved.RequestIDs)
+			})
+
+			t.Run("billing_lookup_is_request_and_identity_scoped", func(t *testing.T) {
+				require.NoError(t, db.AutoMigrate(&Log{}))
+				oldLogDB, oldLogging := LOG_DB, common.LogConsumeEnabled
+				LOG_DB, common.LogConsumeEnabled = db, true
+				t.Cleanup(func() {
+					LOG_DB, common.LogConsumeEnabled = oldLogDB, oldLogging
+					require.NoError(t, db.Migrator().DropTable(&Log{}))
+				})
+				for _, log := range []Log{
+					{RequestId: "req-probe", UserId: 11, TokenId: 101, Type: LogTypeConsume, PromptTokens: 7, CompletionTokens: 30, Quota: 123},
+					{RequestId: "req-probe", UserId: 12, TokenId: 101, Type: LogTypeConsume, Quota: 999},
+					{RequestId: "req-probe", UserId: 11, TokenId: 102, Type: LogTypeConsume, Quota: 999},
+					{RequestId: "another", UserId: 11, TokenId: 101, Type: LogTypeConsume, Quota: 999},
+					{RequestId: "req-probe", UserId: 11, TokenId: 101, Type: LogTypeError, Quota: 999},
+				} {
+					require.NoError(t, db.Create(&log).Error)
+				}
+				input, output, quota, err := ModelProbeBilledUsage("req-probe", 11, 101)
+				require.NoError(t, err)
+				require.NotNil(t, quota)
+				assert.EqualValues(t, 7, input)
+				assert.EqualValues(t, 30, output)
+				assert.EqualValues(t, 123, *quota)
+				_, _, quota, err = ModelProbeBilledUsage("missing", 11, 101)
+				require.NoError(t, err)
+				assert.Nil(t, quota, "missing log is unknown, not free")
+				common.LogConsumeEnabled = false
+				_, _, quota, err = ModelProbeBilledUsage("req-probe", 11, 101)
+				require.NoError(t, err)
+				assert.Nil(t, quota)
+			})
+
 			t.Run("upgrade_released_monitoring_schema", func(t *testing.T) {
 				// The released version had performance metrics and options but no
 				// model-probe table. Only the affected monitoring schema is replayed.
@@ -391,6 +454,34 @@ func TestModelProbeStoreDatabaseMatrix(t *testing.T) {
 					{ID: 101, UserID: 11, Name: "Never expires", Group: "default"},
 					{ID: 102, UserID: 11, Name: "Future expiry", Group: "paid"},
 				}, tokens, "subquery and quoted group filter exclude unusable identities on every database")
+
+				readiness := model_probe_setting.ModelProbeSetting{Enabled: true, ProbeUserID: 11, Targets: []model_probe_setting.Target{{Group: "default", TokenID: 101, Enabled: true}}}
+				for _, tc := range []struct {
+					name      string
+					status    int
+					remaining int
+					unlimited bool
+					expires   int64
+					message   string
+				}{
+					{"depleted before status refresh", common.TokenStatusEnabled, 0, false, -1, "quota is exhausted"},
+					{"exhausted status needs reactivation", common.TokenStatusExhausted, 100, false, -1, "quota is exhausted"},
+					{"disabled", common.TokenStatusDisabled, 100, false, -1, "disabled"},
+					{"expired", common.TokenStatusEnabled, 100, false, 1, "expired"},
+					{"funded", common.TokenStatusEnabled, 100, false, -1, ""},
+					{"unlimited token", common.TokenStatusEnabled, 0, true, -1, ""},
+				} {
+					t.Run(tc.name, func(t *testing.T) {
+						require.NoError(t, db.Model(&Token{}).Where("id = ?", 101).Updates(map[string]any{"status": tc.status, "remain_quota": tc.remaining, "unlimited_quota": tc.unlimited, "expired_time": tc.expires}).Error)
+						err := ValidateModelProbeIdentity(readiness)
+						if tc.message == "" {
+							require.NoError(t, err)
+						} else {
+							require.ErrorContains(t, err, tc.message)
+							assert.NotContains(t, err.Error(), "fixture-never-expires")
+						}
+					})
+				}
 				require.NoError(t, db.Model(&User{}).Where("id = ?", 11).Update("status", common.UserStatusDisabled).Error)
 				users, tokens, err = ModelProbeCredentialCandidates()
 				require.NoError(t, err)

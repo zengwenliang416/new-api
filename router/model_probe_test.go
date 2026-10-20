@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	probe "github.com/QuantumNous/new-api/pkg/model_probe"
 	"github.com/QuantumNous/new-api/service"
@@ -53,7 +54,7 @@ func setupModelProbeRouterTest(t *testing.T) *gin.Engine {
 	constant.StreamingTimeout = 30
 	service.InitHttpClient()
 	engine := gin.New()
-	engine.Use(gin.Recovery())
+	engine.Use(gin.Recovery(), middleware.RequestId())
 	SetRelayRouter(engine)
 	SetTaskPluginProtocolRouter(engine)
 	SetApiRouter(engine)
@@ -83,11 +84,12 @@ func TestModelProbeRunsThroughAuthenticatedBilledRelay(t *testing.T) {
 		expectedCalls  int32
 	}{
 		{name: "correct answer", answer: "21", expectedStatus: model.ModelProbeStatusPass, expectedCalls: 1},
+		{name: "output cap cancels upstream and retains billing", mutation: "output-limit", expectedStatus: model.ModelProbeStatusError, expectedError: "output_limit", expectedCalls: 1},
 		{name: "wrong answer is not retried", answer: "22", expectedStatus: model.ModelProbeStatusFail, expectedCalls: 1},
 		{name: "upstream error is not a wrong answer", upstreamStatus: 400, expectedStatus: model.ModelProbeStatusError, expectedError: "http_error", expectedCalls: 1},
 		{name: "token belongs to another user", mutation: "owner", expectedStatus: model.ModelProbeStatusError, expectedError: "configuration"},
 		{name: "token belongs to another group", mutation: "group", expectedStatus: model.ModelProbeStatusError, expectedError: "configuration"},
-		{name: "exhausted account balance", mutation: "balance", expectedStatus: model.ModelProbeStatusError, expectedError: "http_error"},
+		{name: "exhausted account balance", mutation: "balance", expectedStatus: model.ModelProbeStatusError, expectedError: "account_quota"},
 		{name: "model permission denied", mutation: "model", expectedStatus: model.ModelProbeStatusError, expectedError: "http_error"},
 		{name: "expired token", mutation: "expired", expectedStatus: model.ModelProbeStatusError, expectedError: "http_error"},
 	} {
@@ -109,6 +111,20 @@ func TestModelProbeRunsThroughAuthenticatedBilledRelay(t *testing.T) {
 					return
 				}
 				w.Header().Set("Content-Type", "text/event-stream")
+				if tc.mutation == "output-limit" {
+					for range 129 {
+						if _, err := fmt.Fprintf(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":%q}\n\n", strings.Repeat("x", 16*1024)); err != nil {
+							return
+						}
+						w.(http.Flusher).Flush()
+					}
+					select {
+					case <-r.Context().Done():
+					case <-time.After(5 * time.Second):
+						t.Error("probe did not cancel the upstream request")
+					}
+					return
+				}
 				_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":%q}\n\n", tc.answer)
 				w.(http.Flusher).Flush()
 				_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_probe\",\"object\":\"response\",\"model\":\"gpt-4o-mini\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":%q}]}],\"usage\":{\"input_tokens\":100,\"output_tokens\":10,\"total_tokens\":110}}}\n\ndata: [DONE]\n\n", tc.answer)
@@ -180,7 +196,30 @@ func TestModelProbeRunsThroughAuthenticatedBilledRelay(t *testing.T) {
 			}
 			finished, err := model.GetSystemTaskByTaskID(task.TaskID)
 			require.NoError(t, err)
-			assert.Equal(t, model.SystemTaskStatusSucceeded, finished.Status)
+			expectedTaskStatus := model.SystemTaskStatusSucceeded
+			if tc.expectedStatus == model.ModelProbeStatusError {
+				expectedTaskStatus = model.SystemTaskStatusFailed
+			}
+			assert.Equal(t, expectedTaskStatus, finished.Status)
+			var summary probe.RunSummary
+			require.NoError(t, common.UnmarshalJsonStr(finished.Result, &summary))
+			if tc.expectedStatus == model.ModelProbeStatusError {
+				assert.Equal(t, 1, summary.Error)
+			}
+			if tc.expectedStatus == model.ModelProbeStatusPass {
+				assert.Equal(t, 1, summary.Pass)
+			}
+			if tc.expectedStatus == model.ModelProbeStatusFail {
+				assert.Equal(t, 1, summary.Fail)
+			}
+			if tc.expectedStatus != model.ModelProbeStatusError || tc.mutation == "output-limit" {
+				assert.Equal(t, "billing_log", run.UsageSource)
+				require.NotNil(t, run.ConsumedQuota)
+				var billedUser model.User
+				require.NoError(t, model.DB.First(&billedUser, user.Id).Error)
+				assert.EqualValues(t, billedUser.UsedQuota, *run.ConsumedQuota)
+				assert.NotEmpty(t, run.RequestIDs)
+			}
 		})
 	}
 }
@@ -223,7 +262,7 @@ func TestModelProbeAPIAuthorizationAndGroupIsolation(t *testing.T) {
 			Model: "gpt-4o-mini", Effort: "medium", Kind: "drawing", StartedAt: time.Now().Unix(), TimeoutSeconds: 30,
 			ProbeUserID: 4321, TokenID: 9876, Instructions: "internal instructions",
 			Prompt: "Draw a sheep", OutputText: "<svg></svg>", ArtifactHTML: "<svg></svg>",
-			ErrorDetail: "private execution detail", Trigger: "manual",
+			ErrorDetail: "private execution detail", Trigger: "manual", RequestIDs: `["private-request-id"]`, ConsumedQuota: new(int64(50)), UsageSource: "billing_log",
 		}
 		claimed, err := model.ClaimModelProbeRun(&run)
 		require.NoError(t, err)
@@ -272,7 +311,7 @@ func TestModelProbeAPIAuthorizationAndGroupIsolation(t *testing.T) {
 			engine.ServeHTTP(response, request)
 			assert.Equal(t, tc.status, response.Code, response.Body.String())
 			if tc.credential == "user" && response.Code == http.StatusOK {
-				for _, internal := range []string{"token_id", "probe_user_id", "instructions", "error_detail", "private execution detail"} {
+				for _, internal := range []string{"token_id", "probe_user_id", "instructions", "error_detail", "private execution detail", "private-request-id", "consumed_quota", "request_ids"} {
 					assert.NotContains(t, response.Body.String(), internal)
 				}
 			}
@@ -283,6 +322,19 @@ func TestModelProbeAPIAuthorizationAndGroupIsolation(t *testing.T) {
 				assert.NotContains(t, response.Body.String(), `"password":`)
 			}
 		})
+	}
+
+	for _, who := range []string{"user", "admin"} {
+		request := httptest.NewRequest("GET", "/api/model_probe/overview", nil)
+		request.Header.Set("Authorization", "Bearer "+credentials[who])
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code)
+		if who == "admin" {
+			assert.Contains(t, response.Body.String(), `"execution"`)
+		} else {
+			assert.NotContains(t, response.Body.String(), `"execution"`)
+		}
 	}
 	var taskCount int64
 	require.NoError(t, model.DB.Model(&model.SystemTask{}).Where("type = ?", probe.TaskType).Count(&taskCount).Error)
@@ -299,6 +351,8 @@ func TestModelProbeAPIAuthorizationAndGroupIsolation(t *testing.T) {
 				expected = http.StatusNotFound
 			}
 			assert.Equal(t, expected, response.Code, "public %s of group %s: %s", resource, group, response.Body.String())
+			assert.NotContains(t, response.Body.String(), "consumed_quota")
+			assert.NotContains(t, response.Body.String(), "private-request-id")
 		}
 	}
 	t.Run("root probe options are atomic and remain disableable after credential expiry", func(t *testing.T) {

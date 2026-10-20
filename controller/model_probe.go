@@ -96,12 +96,17 @@ func GetModelProbeRun(c *gin.Context) {
 		"started_at": run.StartedAt, "finished_at": run.FinishedAt,
 		"latency_ms": run.LatencyMs, "first_token_ms": run.FirstTokenMs,
 		"prompt_tokens": run.PromptTokens, "completion_tokens": run.CompletionTokens,
-		"attempts": run.Attempts, "answer": run.Answer, "prompt": run.Prompt,
+		"usage_source": run.UsageSource,
+		"attempts":     run.Attempts, "answer": run.Answer, "prompt": run.Prompt,
 		"output_text": run.OutputText, "artifact_bytes": run.ArtifactBytes,
 		"vehicle": run.Vehicle, "scene": run.Scene, "error_kind": run.ErrorKind,
 		"judge_version": run.JudgeVersion, "revision": run.Revision,
 	}
 	if c.GetInt("role") >= common.RoleAdminUser {
+		data["consumed_quota"] = run.ConsumedQuota
+		requestIDs := []string{}
+		_ = common.UnmarshalJsonStr(run.RequestIDs, &requestIDs)
+		data["request_ids"] = requestIDs
 		data["trigger"] = run.Trigger
 		data["error_detail"] = run.ErrorDetail
 		data["original_status"] = run.OriginalStatus
