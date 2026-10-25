@@ -211,6 +211,49 @@ func TestXAIVideoRequests(t *testing.T) {
 		wantFacts map[string]any
 	}{
 		{
+			name:    "OpenAI JSON preserves a single pinned frame and explicit false audio",
+			decoder: []string{"protocols", "openai_video", "decodeRequest"},
+			ctx: map[string]any{"model": "grok-imagine-video", "body": jsonBody(map[string]any{
+				"model": "grok-imagine-video", "prompt": "animate", "duration": 6, "resolution": "720p", "aspect_ratio": "9:16",
+				"image": map[string]any{"url": "data:image/png;base64,Zmlyc3Q="}, "generate_audio": false,
+			})},
+			wantModel: "grok-imagine-video",
+			wantPath:  "/v1/videos/generations",
+			wantBody: map[string]any{
+				"model": "grok-imagine-video", "prompt": "animate", "duration": float64(6), "resolution": "720p", "aspect_ratio": "9:16",
+				"image": map[string]any{"url": "data:image/png;base64,Zmlyc3Q="}, "generate_audio": false,
+			},
+			wantFacts: map[string]any{"seconds": float64(6), "resolution": "720p", "input_images": float64(1), "input_video_seconds": float64(0), "moderated": false},
+		},
+		{
+			name:    "OpenAI JSON preserves both frame endpoints without duplicate images",
+			decoder: []string{"protocols", "openai_video", "decodeRequest"},
+			ctx: map[string]any{"model": "grok-imagine-video-1.5", "body": jsonBody(map[string]any{
+				"model": "grok-imagine-video-1.5", "prompt": "animate", "duration": 6, "resolution": "720p",
+				"image": referenceImages[0], "last_frame": referenceImages[1],
+			})},
+			wantModel: "grok-imagine-video-1.5",
+			wantPath:  "/v1/videos/generations",
+			wantBody: map[string]any{
+				"model": "grok-imagine-video-1.5", "prompt": "animate", "duration": float64(6), "resolution": "720p",
+				"image": referenceImages[0], "last_frame": referenceImages[1],
+			},
+			wantFacts: map[string]any{"seconds": float64(6), "resolution": "720p", "input_images": float64(2), "moderated": false},
+		},
+		{
+			name:    "OpenAI JSON reference images keep their reference semantics on lite",
+			decoder: []string{"protocols", "openai_video", "decodeRequest"},
+			ctx: map[string]any{"model": "grok-imagine-video-1.5-lite", "body": jsonBody(map[string]any{
+				"model": "grok-imagine-video-1.5-lite", "prompt": "animate", "duration": 6, "resolution": "720p", "reference_images": referenceImages,
+			})},
+			wantModel: "grok-imagine-video-1.5-lite",
+			wantPath:  "/v1/videos/generations",
+			wantBody: map[string]any{
+				"model": "grok-imagine-video-1.5-lite", "prompt": "animate", "duration": float64(6), "resolution": "720p", "reference_images": referenceImages,
+			},
+			wantFacts: map[string]any{"seconds": float64(6), "resolution": "720p", "input_images": float64(2), "moderated": false},
+		},
+		{
 			name:    "reference images keep only documented fields",
 			decoder: []string{"native", "createGeneration"},
 			ctx: map[string]any{"body": jsonBody(map[string]any{
