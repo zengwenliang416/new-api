@@ -442,6 +442,9 @@ func RelayTask(c *gin.Context) {
 	if action := c.GetString("task_action"); action != "" {
 		relayInfo.Action = action
 	}
+	if taskID := c.GetString(service.VideoInputTaskContextKey); taskID != "" {
+		relayInfo.PublicTaskID = taskID
+	}
 
 	if taskErr := relay.ResolveOriginTask(c, relayInfo); taskErr != nil {
 		respondTaskSubmissionError(c, taskErr)

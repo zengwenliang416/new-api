@@ -1,0 +1,6 @@
+# Optional overlay, enabled only when /root/new-api/video-inputs.env exists
+# and VIDEO_INPUTS_ENABLED=true. Secrets remain in that server-side file.
+services:
+  new-api:
+    env_file:
+      - ./video-inputs.env

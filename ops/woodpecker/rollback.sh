@@ -63,7 +63,11 @@ flock -n 9 || fail "rollback already running"
 compose() {
   (
     cd "$root"
-    docker compose --project-name new-api -f "$compose_file" -f "$override_file" "$@"
+    if [ -f "${root}/video-inputs.env" ] && grep -q '^VIDEO_INPUTS_ENABLED=true$' "${root}/video-inputs.env"; then
+      docker compose --project-name new-api -f "$compose_file" -f "$override_file" -f "${root}/video-inputs-compose.yml" "$@"
+    else
+      docker compose --project-name new-api -f "$compose_file" -f "$override_file" "$@"
+    fi
   )
 }
 

@@ -7,6 +7,9 @@ root=/root/new-api
 compose_file="${root}/docker-compose.yml"
 override_file="${root}/deploy-agent-compose.yml"
 env_file="${root}/.env"
+video_inputs_env="${root}/video-inputs.env"
+video_inputs_override="${root}/video-inputs-compose.yml"
+video_inputs_enabled=false
 state_dir="${root}/deploy-state"
 container=new-api
 agent_container=new-api-deploy-agent
@@ -48,7 +51,11 @@ restore_state() {
 compose() {
   (
     cd "$root"
-    docker compose --project-name new-api -f "$compose_file" -f "$override_file" "$@"
+    files=(-f "$compose_file" -f "$override_file")
+    if [[ "$video_inputs_enabled" == true ]]; then
+      files+=(-f "$video_inputs_override")
+    fi
+    docker compose --project-name new-api "${files[@]}" "$@"
   )
 }
 
@@ -84,6 +91,25 @@ grep -q 'container_name: new-api-mysql' "$compose_file" || fail "compose no long
 grep -q 'name: new-api-network' "$compose_file" || fail "compose no longer defines new-api-network"
 [[ "$(docker inspect -f '{{.State.Running}}' "$mysql_container")" == "true" ]] || fail "MySQL is not running"
 docker network inspect "$network" >/dev/null
+
+if [[ -f "$video_inputs_env" ]] && grep -q '^VIDEO_INPUTS_ENABLED=true$' "$video_inputs_env"; then
+  video_inputs_enabled=true
+  for key in VIDEO_INPUT_PUBLIC_URL VIDEO_INPUT_LINK_TTL_SECONDS VIDEO_INPUT_RETENTION_SECONDS VIDEO_INPUT_USER_BUDGET_BYTES VIDEO_INPUT_S3_ENDPOINT VIDEO_INPUT_S3_BUCKET VIDEO_INPUT_S3_ACCESS_KEY VIDEO_INPUT_S3_SECRET_KEY VIDEO_INPUT_SIGNING_KEY; do
+    grep -Eq "^${key}=.+$" "$video_inputs_env" || fail "required video input setting is missing: ${key}"
+  done
+  minio_container="$(sed -n 's/^VIDEO_INPUT_MINIO_CONTAINER=//p' "$video_inputs_env")"
+  [[ "$minio_container" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || fail "invalid video input storage container"
+  [[ "$(docker inspect -f '{{.State.Running}}' "$minio_container")" == true ]] || fail "video input storage is not running"
+  if [[ "$(docker inspect -f "{{if index .NetworkSettings.Networks \"${network}\"}}connected{{end}}" "$minio_container")" != connected ]]; then
+    docker network connect "$network" "$minio_container"
+  fi
+  docker exec --env-file "$video_inputs_env" "$minio_container" sh -c '
+    export MC_HOST_inputs="${VIDEO_INPUT_S3_ENDPOINT%%://*}://${VIDEO_INPUT_S3_ACCESS_KEY}:${VIDEO_INPUT_S3_SECRET_KEY}@${VIDEO_INPUT_S3_ENDPOINT#*://}"
+    mc stat "inputs/${VIDEO_INPUT_S3_BUCKET}" >/dev/null 2>&1
+  ' || fail "private video input bucket access check failed"
+  cp ops/woodpecker/video-inputs-compose.yml "$video_inputs_override"
+  chmod 600 "$video_inputs_env"
+fi
 
 command -v git >/dev/null 2>&1 || fail "git is required to determine the release version"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "deploy workspace is not a git checkout"
