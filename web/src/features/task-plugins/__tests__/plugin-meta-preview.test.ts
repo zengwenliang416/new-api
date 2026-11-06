@@ -52,6 +52,11 @@ const plugin: MarketplacePlugin = {
 test('reads the selected Incho models, protocols and both native routes without requiring runtime hooks', () => {
   const preview = parsePluginMetaPreview(inchoMeta)
   expect(preview.status).toBe('parsed')
+  expect(preview.fields.key).toEqual({
+    state: 'value',
+    origin: 'source',
+    value: 'incho',
+  })
   expect(preview.fields.models).toEqual({
     state: 'value',
     origin: 'source',
@@ -304,6 +309,32 @@ test('only uses plugin-level index hints for the latest version and marks fallba
     origin: 'index',
     value: 'https://old.example.com',
   })
+})
+
+test('reads uploaded plugin metadata without a marketplace entry or executing source', () => {
+  const source = parsePluginMetaPreview(inchoMeta)
+  const resolved = resolvePluginMetaPreview(undefined, undefined, source)
+  expect(resolved.key).toEqual({
+    state: 'value',
+    origin: 'source',
+    value: 'incho',
+  })
+  expect(resolved.models).toEqual({
+    state: 'value',
+    origin: 'source',
+    value: ['incho_music'],
+  })
+})
+
+test('only falls back to a marketplace key when the source key is unresolved', () => {
+  const unknown = parsePluginMetaPreview('export const meta = buildMeta();')
+  expect(
+    resolvePluginMetaPreview(plugin, plugin.versions[0], unknown).key
+  ).toEqual({ state: 'value', origin: 'index', value: 'incho' })
+  const missing = parsePluginMetaPreview('export const meta = {models: []};')
+  expect(
+    resolvePluginMetaPreview(plugin, plugin.versions[0], missing).key
+  ).toEqual({ state: 'missing', origin: 'source' })
 })
 
 test('preserves valid protocol declarations and empty model lists from the marketplace index', () => {
