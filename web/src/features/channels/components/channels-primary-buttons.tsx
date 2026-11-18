@@ -51,6 +51,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { NodeSyncIndicator } from '@/features/system-info/components/node-sync-indicator'
 import {
   ADMIN_PERMISSION_ACTIONS,
   ADMIN_PERMISSION_RESOURCES,
@@ -107,6 +108,7 @@ export function ChannelsPrimaryButtons() {
   return (
     <>
       <div className='flex items-center gap-2'>
+        <NodeSyncIndicator topics={['channels']} />
         {/* Desktop: Toggle switches visible */}
         <div className='hidden items-center gap-2 rounded-md border px-3 py-1.5 sm:flex'>
           <ListChecks className='text-muted-foreground h-4 w-4' />

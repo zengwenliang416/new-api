@@ -391,7 +391,7 @@ func TestModelProbeStoreDatabaseMatrix(t *testing.T) {
 				// or manual repair. Reload must retain all last-known-good fields.
 				require.NoError(t, db.Save(&Option{Key: model_probe_setting.Prefix + "probe_user_id", Value: "789"}).Error)
 				require.NoError(t, db.Save(&Option{Key: model_probe_setting.Prefix + "targets", Value: "[{"}).Error)
-				loadOptionsFromDatabase()
+				require.NoError(t, LoadOptionsFromDatabase())
 				assert.Equal(t, initial, model_probe_setting.GetSetting(), "invalid reload must not publish even the valid fields")
 				common.OptionMapRWMutex.RLock()
 				assert.Equal(t, "123", common.OptionMap[model_probe_setting.Prefix+"probe_user_id"])
@@ -404,7 +404,7 @@ func TestModelProbeStoreDatabaseMatrix(t *testing.T) {
 				for key, value := range values {
 					require.NoError(t, db.Save(&Option{Key: key, Value: value}).Error)
 				}
-				loadOptionsFromDatabase()
+				require.NoError(t, LoadOptionsFromDatabase())
 				reloaded := model_probe_setting.GetSetting()
 				assert.True(t, reloaded.Enabled)
 				assert.Equal(t, 789, reloaded.ProbeUserID)
@@ -414,7 +414,7 @@ func TestModelProbeStoreDatabaseMatrix(t *testing.T) {
 				// No user/token records exist in this isolated database. An
 				// administrator can still disable a previously valid configuration.
 				require.NoError(t, UpdateOption(model_probe_setting.Prefix+"enabled", "false"))
-				loadOptionsFromDatabase()
+				require.NoError(t, LoadOptionsFromDatabase())
 				assert.False(t, model_probe_setting.GetSetting().Enabled)
 				var disabled Option
 				require.NoError(t, db.Where(&Option{Key: model_probe_setting.Prefix + "enabled"}).First(&disabled).Error)
